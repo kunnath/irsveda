@@ -1,5 +1,9 @@
 # AyushIris: Ayurvedic Iridology Knowledge Base
 
+<p align="center">
+  <img src="irs.png" alt="AyushIris Logo" width="300">
+</p>
+
 ## Overview
 
 AyushIris is a Streamlit application that extracts iris-related information from Ayurvedic and Iridology books, stores it as vector embeddings in Qdrant, and provides a query interface to access this knowledge. The application can also analyze iris images to generate relevant health queries.
