@@ -13,16 +13,25 @@ class IrisQdrantClient:
         self.collection_name = collection_name
         
     def create_collection(self):
-        """Create or recreate the collection for storing iris chunks."""
+        """Create the collection for storing iris chunks if it doesn't exist."""
         vector_size = self.model.get_sentence_embedding_dimension()
         
-        self.client.recreate_collection(
-            collection_name=self.collection_name,
-            vectors_config=models.VectorParams(
-                size=vector_size,
-                distance=models.Distance.COSINE
+        # Check if collection exists first
+        collections = self.client.get_collections()
+        collection_exists = any(collection.name == self.collection_name for collection in collections.collections)
+        
+        if not collection_exists:
+            # Only create if it doesn't exist
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=models.VectorParams(
+                    size=vector_size,
+                    distance=models.Distance.COSINE
+                )
             )
-        )
+            print(f"Created new collection: {self.collection_name}")
+        else:
+            print(f"Using existing collection: {self.collection_name}")
         
     def store_chunks(self, chunks: List[Dict[str, Any]]) -> List[str]:
         """

@@ -7,13 +7,14 @@ import os
 import pytesseract
 
 
-def extract_iris_chunks(pdf_path: str) -> List[Dict[str, Any]]:
+def extract_iris_chunks(pdf_path: str, progress_callback=None) -> List[Dict[str, Any]]:
     """
     Extract iris-related chunks from PDF that contain how/why/when questions.
-    Uses OCR if regular text extraction doesn't yield results.
+    Uses both standard extraction and OCR to ensure complete processing.
     
     Args:
         pdf_path: Path to the PDF file
+        progress_callback: Optional function to report progress (page_num, total_pages)
         
     Returns:
         List of iris-related text chunks with metadata
@@ -21,57 +22,76 @@ def extract_iris_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
     iris_chunks = []
     
-    # First try standard text extraction
+    # First try standard text extraction for all pages
+    total_pages = len(doc)
+    print(f"Performing standard text extraction on all {total_pages} pages...")
     for page_num, page in enumerate(doc):
+        if progress_callback:
+            progress_callback(page_num + 1, total_pages * 2)  # Count standard and OCR as separate passes
+        
         text = page.get_text()
-        if "iris" in text.lower():
+        if "iris" in text.lower() or "iridology" in text.lower():
             # Split text into paragraphs for better context
             paragraphs = text.split('\n\n')
             for para in paragraphs:
-                if 'iris' in para.lower() and re.search(r'\b(how|why|when)\b', para.lower()):
+                # Less restrictive content filtering - just look for iris-related content
+                if 'iris' in para.lower() or 'iridology' in para.lower():
                     # Add page number for reference
                     iris_chunks.append({
                         "text": para.strip(),
                         "page": page_num + 1,  # 1-based page numbering
-                        "source": pdf_path
+                        "source": pdf_path,
+                        "extraction_method": "standard"
                     })
     
-    # If no iris content found and the document appears to be scanned, try OCR
-    if not iris_chunks:
-        print(f"No iris content found via standard extraction. Attempting OCR...")
+    # Always use OCR as well to catch content that might be in image form
+    print(f"Attempting OCR to extract additional content...")
+    
+    # Process pages with a step size to balance thoroughness with performance
+    try:
+        # Verify Tesseract is available
+        pytesseract.get_tesseract_version()
         
-        # Process a subset of pages to save time
-        pages_to_process = min(10, len(doc))
-        
-        try:
-            # Verify Tesseract is available
-            pytesseract.get_tesseract_version()
+        # Process every 5th page to balance thoroughness with performance
+        page_step = 5
+        for page_idx, page_num in enumerate(range(0, len(doc), page_step)):
+            if progress_callback:
+                # Calculate progress considering we're in the OCR phase (second half of progress)
+                progress_callback(total_pages + (page_idx * page_step // len(doc) * total_pages), total_pages * 2)
+                
+            print(f"OCR processing page {page_num+1}/{len(doc)}...")
+            page = doc[page_num]
             
-            for page_num in range(pages_to_process):
-                print(f"OCR processing page {page_num+1}/{pages_to_process}...")
-                page = doc[page_num]
-                
-                # Get the page as an image at higher resolution for better OCR
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                img = Image.open(io.BytesIO(pix.tobytes("png")))
-                
-                # Use OCR to extract text
-                ocr_text = pytesseract.image_to_string(img)
-                
-                # Check for iris-related content
-                if "iris" in ocr_text.lower() or "iridology" in ocr_text.lower():
-                    # Split into paragraphs
-                    paragraphs = ocr_text.split('\n\n')
-                    for para in paragraphs:
-                        if ('iris' in para.lower() or 'iridology' in para.lower()) and re.search(r'\b(how|why|when)\b', para.lower()):
+            # Get the page as an image at higher resolution for better OCR
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            
+            # Use OCR to extract text
+            ocr_text = pytesseract.image_to_string(img)
+            
+            # Check for iris-related content
+            if "iris" in ocr_text.lower() or "iridology" in ocr_text.lower():
+                # Split into paragraphs
+                paragraphs = ocr_text.split('\n\n')
+                for para in paragraphs:
+                    # Less restrictive content filtering
+                    if 'iris' in para.lower() or 'iridology' in para.lower():
+                        # Skip duplicate content already found via standard extraction
+                        is_duplicate = False
+                        for existing_chunk in iris_chunks:
+                            if para.strip() in existing_chunk["text"]:
+                                is_duplicate = True
+                                break
+                                
+                        if not is_duplicate:
                             iris_chunks.append({
                                 "text": para.strip(),
                                 "page": page_num + 1,  # 1-based page numbering
                                 "source": pdf_path,
                                 "extraction_method": "ocr"
                             })
-        except Exception as e:
-            print(f"OCR processing error: {str(e)}")
+    except Exception as e:
+        print(f"OCR processing error: {str(e)}")
     
     print(f"Extracted {len(iris_chunks)} iris-related chunks from {pdf_path}")
     return iris_chunks

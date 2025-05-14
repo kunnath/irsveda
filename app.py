@@ -11,13 +11,13 @@ from iris_predictor import IrisPredictor
 
 # Page title and configuration
 st.set_page_config(
-    page_title="AyushIris - Iridology Knowledge Base",
+    page_title="irsveda - Iridology Knowledge Base",
     page_icon="👁️",
     layout="wide"
 )
 
 # Create sidebar
-st.sidebar.title("AyushIris")
+st.sidebar.title("irsveda")
 st.sidebar.image("static/iris_logo.png", use_container_width=True)
 st.sidebar.markdown("---")
 st.sidebar.info(
@@ -81,16 +81,30 @@ with tabs[0]:
                     
                     # Display OCR status message
                     ocr_status = st.empty()
-                    ocr_status.info("📄 Analyzing text content...")
-                    chunks = extract_iris_chunks(temp_path)
+                    ocr_status.info("📄 Analyzing text and image content...")
+                    
+                    # Create a progress bar
+                    progress_bar = st.progress(0)
+                    
+                    # Define a custom callback for progress updates
+                    def update_progress(page_num, total_pages):
+                        progress = min(page_num / total_pages, 1.0)
+                        progress_bar.progress(progress)
+                        ocr_status.info(f"📄 Processing page {page_num}/{total_pages}...")
+                    
+                    # Extract chunks with progress updates
+                    chunks = extract_iris_chunks(temp_path, progress_callback=update_progress)
                     end_time = time.time()
+                    
+                    # Update status upon completion
+                    progress_bar.progress(1.0)
                     
                     # Add OCR extraction method info if applicable
                     ocr_used = any(chunk.get("extraction_method") == "ocr" for chunk in chunks)
                     if ocr_used:
                         ocr_status.success("🔍 OCR processing completed successfully")
                     else:
-                        ocr_status.empty()
+                        ocr_status.success("📄 Text extraction completed successfully")
                     
                     st.session_state.extracted_chunks.extend(chunks)
                     
