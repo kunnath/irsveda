@@ -86,9 +86,11 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
     print(f"Pass 1: Extracting text with NLP processing from all {total_pages} pages...")
     print(f"spaCy available: {SPACY_AVAILABLE}")
     
-    # Debugging: Track pages with content
+    # Initialize tracking variables used throughout the function
+    # These will be used at the end for diagnostics
     pages_with_content = 0
     pages_with_iris_keywords = 0
+    iris_keywords_found = set()
     
     for page_num, page in enumerate(doc):
         if progress_callback:
@@ -108,6 +110,8 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
             # Show a sample of matching keywords for debugging
             found_keywords = [k for k in IRIS_KEYWORDS if k in text.lower()]
             if found_keywords:
+                # Store all unique keywords found for later diagnostics
+                iris_keywords_found.update(found_keywords)
                 print(f"Keywords found: {', '.join(found_keywords[:5])}")
         
         # Check if the page has any relevant content before detailed processing
@@ -247,10 +251,24 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
         for page_num, page in enumerate(doc):
             text = page.get_text()
             # Use simpler matching to capture more content
-            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip() and len(p.strip()) > 100]
+            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip() and len(p.strip()) > 50]  # Lower size threshold
+            
+            # Check if the page has almost no text - might need OCR
+            if len(text) < 100 and page_num < min(20, total_pages):
+                print(f"Page {page_num+1} has very little text. Might be an image-based PDF. Trying OCR...")
+                try:
+                    # Get the page as an image and run OCR
+                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # Higher resolution
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    ocr_text = pytesseract.image_to_string(img, config='--psm 6')
+                    if len(ocr_text) > 100:
+                        print(f"OCR extracted {len(ocr_text)} chars from page {page_num+1}")
+                        paragraphs.append(ocr_text)
+                except Exception as e:
+                    print(f"OCR attempt failed: {e}")
             
             for para_idx, para in enumerate(paragraphs):
-                # Check for ANY health-related content with lower threshold
+                # More permissive matching - any health or iris keyword
                 if any(keyword in para.lower() for keyword in HEALTH_KEYWORDS) or \
                    any(keyword in para.lower() for keyword in IRIS_KEYWORDS):
                     print(f"Found broader match on page {page_num+1}")
@@ -288,13 +306,28 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
         print(f"\nTroubleshooting information:")
         print(f"- Pages with any content: {pages_with_content}/{total_pages}")  
         print(f"- Pages with iris keywords: {pages_with_iris_keywords}/{total_pages}")
-        print(f"- IRIS_KEYWORDS used for matching: {', '.join(list(IRIS_KEYWORDS)[:10])}...")
+        print(f"- IRIS_KEYWORDS found in document: {', '.join(list(iris_keywords_found)[:10])}")
+        print(f"- All IRIS_KEYWORDS used for matching: {', '.join(list(IRIS_KEYWORDS)[:10])}...")
+        
+        # Dependency information
+        print("\nSystem information:")
+        print(f"- Python version: {sys.version}")
+        print(f"- spaCy available: {SPACY_AVAILABLE}")
+        if SPACY_AVAILABLE:
+            import spacy
+            print(f"- spaCy version: {spacy.__version__}")
+            try:
+                models = subprocess.check_output([sys.executable, "-m", "spacy", "info"]).decode('utf-8')
+                print(f"- Available spaCy models: {models.split('===========')[1].strip() if '===========' in models else 'Unknown'}")
+            except:
+                print("- Could not retrieve spaCy model information")
         
         # Suggest a solution
         print("\nPossible solutions:")
         print("1. Check if the PDF has searchable text (not just images)")
         print("2. Try using OCR on the document first if it's image-based")
         print("3. Verify the document actually contains iridology or iris-related content")
+        print("4. If running with Python 3.13, try using Python 3.10-3.12 for better compatibility with NLP libraries")
     
     return enhanced_chunks
 
@@ -414,47 +447,105 @@ def simple_entity_extraction(text: str) -> List[Dict[str, str]]:
 
 def extract_keywords(text: str) -> List[str]:
     """Extract key terms from text."""
-    # Process with basic NLP
-    tokens = word_tokenize(text.lower())
-    
-    # Remove stopwords, punctuation, and short words
-    stop_words = set(stopwords.words('english'))
-    filtered_tokens = [w for w in tokens if w not in stop_words and len(w) > 2 and w.isalnum()]
-    
-    # Get most common words
-    word_freq = Counter(filtered_tokens)
-    
-    # Extract top keywords
-    keywords = [word for word, freq in word_freq.most_common(10)]
-    
-    # Add any iris or health keywords that appear in the text
-    for word in IRIS_KEYWORDS.union(HEALTH_KEYWORDS):
-        if word in text.lower() and word not in keywords:
-            keywords.append(word)
-            
-    return keywords
+    try:
+        # Process with basic NLP
+        tokens = word_tokenize(text.lower())
+        
+        # Remove stopwords, punctuation, and short words
+        try:
+            stop_words = set(stopwords.words('english'))
+        except:
+            # Fallback if NLTK data is not available
+            stop_words = {'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'else', 'when',
+                         'at', 'from', 'by', 'for', 'with', 'about', 'to', 'in', 'on', 'of'}
+        
+        filtered_tokens = [w for w in tokens if w not in stop_words and len(w) > 2 and w.isalnum()]
+        
+        # Get most common words
+        word_freq = Counter(filtered_tokens)
+        
+        # Extract top keywords - ensure we get at least some keywords even if fewer than 10
+        top_n = min(10, len(word_freq))
+        keywords = [word for word, freq in word_freq.most_common(top_n)]
+        
+        # Add any iris or health keywords that appear in the text
+        text_lower = text.lower()
+        for word in IRIS_KEYWORDS.union(HEALTH_KEYWORDS):
+            if word in text_lower and word not in keywords:
+                keywords.append(word)
+                
+        # If we still have no keywords, extract any words that might be relevant
+        if not keywords:
+            print("No keywords found through standard extraction, trying fallback method...")
+            # Try to extract any words that might be relevant based on length and frequency
+            words = re.findall(r'\b[a-zA-Z]{5,}\b', text)
+            if words:
+                keywords = list(set([w.lower() for w in words]))[:10]
+                
+        return keywords
+    except Exception as e:
+        print(f"Error in keyword extraction: {e}")
+        # Return basic word extraction as fallback
+        words = re.findall(r'\b[a-zA-Z]{5,}\b', text.lower())
+        return list(set(words))[:10] if words else ["no_keywords_extracted"]
 
 def calculate_relevance_score(text: str) -> float:
     """Calculate a relevance score (0-1) for the text based on keyword density."""
-    text_lower = text.lower()
-    score = 0.0
-    
-    # Count iris keywords
-    iris_count = sum(1 for keyword in IRIS_KEYWORDS if keyword in text_lower)
-    
-    # Count health keywords
-    health_count = sum(1 for keyword in HEALTH_KEYWORDS if keyword in text_lower)
-    
-    # Calculate score based on keyword density
-    text_length = len(text_lower.split())
-    if text_length > 0:
-        # More weight to iris keywords
-        iris_density = iris_count / text_length * 10
-        health_density = health_count / text_length * 5
+    try:
+        text_lower = text.lower()
+        score = 0.0
         
-        score = min(1.0, (iris_density + health_density))
-    
-    return score
+        # Count iris keywords - with extra debug info
+        iris_matches = [keyword for keyword in IRIS_KEYWORDS if keyword in text_lower]
+        iris_count = len(iris_matches)
+        
+        # Count health keywords
+        health_matches = [keyword for keyword in HEALTH_KEYWORDS if keyword in text_lower]
+        health_count = len(health_matches)
+        
+        # Check for partial matches if no exact matches
+        if iris_count == 0:
+            # Check for word stems
+            iris_stems = ["irid", "eye", "pupil", "scler"]
+            for stem in iris_stems:
+                if stem in text_lower:
+                    iris_count += 0.5  # Partial match counts less
+        
+        # For very short texts, boost the score to avoid filtering out good content
+        text_length = len(text_lower.split())
+        
+        # Calculate score based on keyword density with adjusted weights
+        if text_length > 0:
+            if text_length < 30:  # Very short paragraphs need higher density to matter
+                iris_density = iris_count / min(text_length, 10) * 10  # Avoid division by very small numbers
+                health_density = health_count / min(text_length, 10) * 3
+            else:
+                iris_density = iris_count / min(text_length, 100) * 12  # Cap at 100 words to avoid dilution
+                health_density = health_count / min(text_length, 100) * 4
+            
+            # If we have iris keywords, boost the score
+            if iris_count > 0:
+                base_score = min(1.0, (iris_density + health_density))
+                # Ensure at least 0.4 score if we have any iris keywords
+                score = max(0.4, base_score) if iris_count > 0 else base_score
+            else:
+                # Lower score for health-only content
+                score = min(0.6, (health_density * 1.5))
+        
+        # Debug info for low scores
+        if score < 0.4 and (iris_count > 0 or health_count > 0):
+            matched_keywords = iris_matches + health_matches
+            print(f"Low score ({score:.2f}) despite keywords: {', '.join(matched_keywords[:3])}")
+        
+        return score
+    except Exception as e:
+        print(f"Error in calculate_relevance_score: {e}")
+        # Fallback - if we have iris keywords, return higher score
+        if any(keyword in text.lower() for keyword in IRIS_KEYWORDS):
+            return 0.7
+        elif any(keyword in text.lower() for keyword in HEALTH_KEYWORDS):
+            return 0.5
+        return 0.3
 
 def identify_important_pages(doc, existing_chunks: List[Dict[str, Any]]) -> List[int]:
     """Identify important pages for OCR processing."""

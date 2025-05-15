@@ -19,12 +19,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir fpdf>=1.7.2
 
 # Copy application code
 COPY . .
 
-# Create uploads directory
+# Create uploads and fonts directories
 RUN mkdir -p uploads && chmod 777 uploads
+RUN mkdir -p fonts && chmod 777 fonts
+
+# Ensure fonts are available for PDF generation
+RUN apt-get update && apt-get install -y curl \
+    && curl -L -o fonts/DejaVuSans.ttf https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf \
+    && curl -L -o fonts/DejaVuSans-Bold.ttf https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install additional dependencies and models
 RUN pip install scikit-learn && \

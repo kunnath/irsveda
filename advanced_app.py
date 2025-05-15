@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
+from datetime import datetime
 from PIL import Image
 
 # Import our enhanced components
@@ -19,6 +20,10 @@ from check_qdrant_status import verify_qdrant_collections, create_enhanced_chunk
 from pdf_extractor import extract_iris_chunks
 from iris_qdrant import IrisQdrantClient
 from iris_predictor import IrisPredictor
+
+# Import the new IrisZone analyzer
+from iris_zone_analyzer import IrisZoneAnalyzer
+from iris_report_generator import IrisReportGenerator
 
 # Define helper functions first, before they are used
 def get_score_color(score):
@@ -183,6 +188,12 @@ if "answer_generator" not in st.session_state:
 if "iris_predictor" not in st.session_state:
     st.session_state.iris_predictor = IrisPredictor()
 
+if "iris_zone_analyzer" not in st.session_state:
+    st.session_state.iris_zone_analyzer = IrisZoneAnalyzer()
+    
+if "iris_report_generator" not in st.session_state:
+    st.session_state.iris_report_generator = IrisReportGenerator()
+
 if "extracted_chunks" not in st.session_state:
     st.session_state.extracted_chunks = []
 
@@ -198,7 +209,7 @@ if "is_enhanced_initialized" not in st.session_state:
 st.title("Advanced Ayurvedic Iridology Knowledge Base")
 
 # Tab layout
-tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "📊 Statistics", "⚙️ Configuration"])
+tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "🔬 IrisZone", "📊 Statistics", "⚙️ Configuration"])
 
 # First tab - PDF Upload with enhanced processing
 with tabs[0]:
@@ -530,8 +541,218 @@ with tabs[2]:
             # Clean up temp file
             os.unlink(temp_path)
 
-# Fourth tab - Statistics with enhanced metrics
+# Fourth tab - IrisZone Layered Analysis
 with tabs[3]:
+    st.header("Iris Zone Analysis")
+    
+    st.info(
+        "Upload an iris image to analyze the different zones according to Ayurvedic principles. "
+        "This feature uses computer vision to identify and map different iris zones to corresponding body systems."
+    )
+    
+    uploaded_zone_image = st.file_uploader(
+        "Upload iris image for zone analysis", 
+        type=["jpg", "jpeg", "png"],
+        key="zone_image_uploader",
+        help="Upload a clear image of an iris for detailed zone mapping"
+    )
+    
+    if uploaded_zone_image:
+        # Save temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+            tmp_file.write(uploaded_zone_image.read())
+            temp_zone_path = tmp_file.name
+        
+        try:
+            # Process iris image for zone analysis
+            with st.spinner("Analyzing iris zones..."):
+                zone_results = st.session_state.iris_zone_analyzer.process_iris_image(temp_zone_path)
+                
+                if "error" in zone_results:
+                    st.error(zone_results["error"])
+                else:
+                    # Create tabs for different visualizations
+                    zone_vis_tabs = st.tabs(["Zone Map", "Detailed Analysis", "Ayurvedic Interpretation"])
+                    
+                    # Zone Map visualization tab
+                    with zone_vis_tabs[0]:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.subheader("Original Image")
+                            st.image(zone_results["original_image"], use_column_width=True)
+                        
+                        with col2:
+                            st.subheader("Iris Zone Map")
+                            st.image(zone_results["zone_map"], use_column_width=True)
+                            st.caption("The color overlay shows different zones of the iris according to iridology principles")
+                    
+                    # Detailed Analysis tab
+                    with zone_vis_tabs[1]:
+                        st.subheader("Detailed Zone Analysis")
+                        
+                        # Show boundary detection
+                        st.image(zone_results["boundary_image"], use_column_width=True)
+                        st.caption("Iris and pupil boundaries detected")
+                        
+                        # Display each zone's data in expanders
+                        for zone_name, zone_data in zone_results["zones_analysis"].items():
+                            zone_display_name = zone_data["name"]
+                            health_condition = zone_data["health_indication"]["condition"]
+                            confidence = zone_data["health_indication"]["confidence"]
+                            
+                            # Determine color based on health condition
+                            if health_condition == "normal":
+                                condition_color = "green"
+                            elif health_condition == "stressed":
+                                condition_color = "orange"
+                            else:
+                                condition_color = "red"
+                                
+                            with st.expander(f"{zone_display_name} - {health_condition.capitalize()}"):
+                                # Display zone systems and description
+                                st.markdown(f"**Corresponds to:** {', '.join(zone_data['ayurvedic_mapping']['systems'])}")
+                                st.markdown(f"**Description:** {zone_data['ayurvedic_mapping']['description']}")
+                                
+                                # Display health indication
+                                st.markdown(f"**Condition:** <span style='color:{condition_color}'>{health_condition.capitalize()}</span> (Confidence: {confidence:.1%})", unsafe_allow_html=True)
+                                st.markdown(f"**Suggestion:** {zone_data['health_indication']['suggestion']}")
+                                
+                                # Display dosha information
+                                dosha = zone_data['ayurvedic_mapping']['dominant_dosha']
+                                st.markdown(f"**Dominant Dosha:** {dosha.capitalize()}")
+                                
+                                if dosha != "unknown" and len(zone_data['ayurvedic_mapping']['dosha_qualities']) > 0:
+                                    st.markdown(f"**Qualities:** {', '.join(zone_data['ayurvedic_mapping']['dosha_qualities'])}")
+                    
+                    # Ayurvedic Interpretation tab
+                    with zone_vis_tabs[2]:
+                        st.subheader("Ayurvedic Interpretation")
+                        
+                        # Summary of overall health
+                        st.markdown(f"### Overall Balance: {zone_results['health_summary']['overall_health'].capitalize()}")
+                        
+                        # Create dosha balance visualization
+                        if 'dosha_balance' in zone_results['health_summary']:
+                            dosha_balance = zone_results['health_summary']['dosha_balance']
+                            
+                            # Create dosha pie chart
+                            if dosha_balance:
+                                dosha_labels = [f"{k.capitalize()} ({v:.0%})" for k, v in dosha_balance.items()]
+                                dosha_values = list(dosha_balance.values())
+                                
+                                fig, ax = plt.subplots()
+                                ax.pie(dosha_values, labels=dosha_labels, autopct='%1.1f%%', 
+                                       startangle=90, colors=['#a29bfe', '#ff7675', '#55efc4'])
+                                ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                                ax.set_title('Dosha Distribution in Iris')
+                                
+                                st.pyplot(fig)
+                                
+                            # Dosha interpretation
+                            st.markdown("### Dosha Interpretation")
+                            
+                            primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0] if dosha_balance else "unknown"
+                            
+                            if primary_dosha == "vata":
+                                st.markdown("""
+                                **Vata Dominant Iris**
+                                
+                                The iris shows signs of Vata dominance, which relates to the air and ether elements.
+                                This often manifests as:
+                                - Heightened nervous system activity
+                                - Potential for dryness and variability in systems
+                                - Need for grounding and stability
+                                
+                                **Balancing Suggestions:**
+                                - Regular routines and rest patterns
+                                - Warm, nourishing, and grounding foods
+                                - Gentle oil massage (abhyanga) with sesame oil
+                                - Meditation and stress reduction practices
+                                """)
+                            elif primary_dosha == "pitta":
+                                st.markdown("""
+                                **Pitta Dominant Iris**
+                                
+                                The iris shows signs of Pitta dominance, which relates to the fire and water elements.
+                                This often manifests as:
+                                - Strong digestive and metabolic functions
+                                - Tendency toward heat and inflammation
+                                - Potential for intensity and sharpness in bodily processes
+                                
+                                **Balancing Suggestions:**
+                                - Cooling foods and herbs
+                                - Avoiding excessive heat, sun exposure, and spicy foods
+                                - Regular exercise that's not too intense
+                                - Calming and cooling practices like moonlight walks
+                                """)
+                            elif primary_dosha == "kapha":
+                                st.markdown("""
+                                **Kapha Dominant Iris**
+                                
+                                The iris shows signs of Kapha dominance, which relates to the earth and water elements.
+                                This often manifests as:
+                                - Stable energy and strong immunity
+                                - Potential for congestion or sluggishness
+                                - Well-developed structural elements in the body
+                                
+                                **Balancing Suggestions:**
+                                - Regular stimulating exercise
+                                - Warm, light, and spiced foods
+                                - Dry brushing and invigorating practices
+                                - Varied routines to prevent stagnation
+                                """)
+                
+                # Add user info form
+                with st.expander("Add Personal Information to Report", expanded=False):
+                    st.info("This information will be included in your report. All fields are optional.")
+                    user_info = {}
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        user_info["Name"] = st.text_input("Name", "")
+                        user_info["Age"] = st.text_input("Age", "")
+                    with col2:
+                        user_info["Gender"] = st.selectbox("Gender", ["", "Male", "Female", "Other"])
+                        user_info["Date"] = st.date_input("Date", datetime.now()).strftime("%Y-%m-%d")
+                    
+                    # Remove empty fields
+                    user_info = {k: v for k, v in user_info.items() if v}
+                
+                # Generate and offer reports for download
+                try:
+                    # First, always generate the HTML report
+                    html_report = st.session_state.iris_report_generator.generate_html_report(zone_results, user_info)
+                    st.download_button(
+                        label="Download HTML Report (for viewing online)",
+                        data=html_report,
+                        file_name=f"iris_zone_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                        mime="text/html",
+                        key="html_report_button"
+                    )
+                    
+                    # Try to generate PDF report if available
+                    pdf_report = st.session_state.iris_report_generator.generate_report(zone_results, user_info)
+                    if pdf_report is not None:
+                        st.download_button(
+                            label="Download Iris Zone Analysis PDF Report",
+                            data=pdf_report,
+                            file_name=f"iris_zone_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                            mime="application/pdf",
+                            key="pdf_report_button"
+                        )
+                    else:
+                        st.warning("PDF generation is not available. To enable PDF reports, install the 'fpdf' package using: pip install fpdf")
+                except Exception as e:
+                    st.error(f"Error generating report: {str(e)}")
+                
+        except Exception as e:
+            st.error(f"Error analyzing iris zones: {str(e)}")
+        finally:
+            # Clean up temp file
+            os.unlink(temp_zone_path)
+
+# Fifth tab - Statistics with enhanced metrics
+with tabs[4]:
     st.header("Knowledge Base Statistics")
     
     # Create tabs for different stats
