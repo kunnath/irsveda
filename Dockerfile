@@ -26,8 +26,13 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p uploads && chmod 777 uploads
 
+# Install additional dependencies and models
+RUN pip install scikit-learn && \
+    python -m spacy download en_core_web_sm && \
+    python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
+
 # Expose port for Streamlit
 EXPOSE 8501
 
-# Run the application
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run the application - can be switched between app.py and advanced_app.py
+CMD ["streamlit", "run", "advanced_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
