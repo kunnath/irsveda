@@ -1,0 +1,826 @@
+from pathlib import Path
+import tempfile
+import streamlit as st
+import time
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import json
+from PIL import Image
+
+# Import our enhanced components
+from enhanced_pdf_extractor import extract_structured_chunks
+from enhanced_iris_qdrant import EnhancedIrisQdrantClient
+from context_aware_answers import ContextAwareAnswerGenerator
+from check_qdrant_status import verify_qdrant_collections, create_enhanced_chunk_from_standard
+
+# Keep the original imports for backward compatibility
+from pdf_extractor import extract_iris_chunks
+from iris_qdrant import IrisQdrantClient
+from iris_predictor import IrisPredictor
+
+# Page title and configuration
+st.set_page_config(
+    page_title="irsveda - Advanced Iridology Knowledge Base",
+    page_icon="👁️",
+    layout="wide"
+)
+
+# Create sidebar with improved UI
+st.sidebar.title("irsveda")
+st.sidebar.image("static/iris_logo.png", use_container_width=True)
+st.sidebar.markdown("---")
+st.sidebar.info(
+    "This application extracts iris-related information from Ayurvedic/Iridology "
+    "books and allows you to query the knowledge base using advanced NLP."
+)
+
+# Add settings in sidebar
+with st.sidebar.expander("Advanced Settings"):
+    use_enhanced_mode = st.checkbox("Use Enhanced NLP Mode", value=True, 
+                                   help="Use advanced NLP processing for better results")
+    result_count = st.slider("Result Count", min_value=3, max_value=10, value=5,
+                            help="Number of results to return from the knowledge base")
+    min_relevance = st.slider("Minimum Relevance", min_value=0.0, max_value=1.0, value=0.6, step=0.05,
+                             help="Minimum relevance score (0-1) for search results")
+
+# Function to check Qdrant connection and initialize collection status
+def check_qdrant_status():
+    try:
+        # Check if collections exist and have data
+        # For standard collection
+        try:
+            collections = st.session_state.qdrant_client.client.get_collections()
+            collection_exists = any(collection.name == "iris_chunks" for collection in collections.collections)
+            if collection_exists:
+                # Check if it has data
+                count = st.session_state.qdrant_client.client.count(
+                    collection_name="iris_chunks"
+                ).count
+                if count > 0:
+                    st.session_state.is_initialized = True
+        except Exception as e:
+            print(f"Error checking standard collection: {str(e)}")
+            
+        # For enhanced collection
+        try:
+            collections = st.session_state.enhanced_qdrant_client.client.get_collections()
+            collection_exists = any(collection.name == "enhanced_iris_chunks" for collection in collections.collections)
+            if collection_exists:
+                # Check if it has data
+                count = st.session_state.enhanced_qdrant_client.client.count(
+                    collection_name="enhanced_iris_chunks"
+                ).count
+                if count > 0:
+                    st.session_state.is_enhanced_initialized = True
+        except Exception as e:
+            print(f"Error checking enhanced collection: {str(e)}")
+            
+    except Exception as e:
+        print(f"Error checking Qdrant status: {str(e)}")
+
+# Initialize session state
+if "enhanced_qdrant_client" not in st.session_state:
+    # Use environment variables if available (for Docker)
+    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
+    qdrant_port = int(os.environ.get("QDRANT_PORT", 6333))
+    
+    # Initialize both regular and enhanced clients
+    st.session_state.qdrant_client = IrisQdrantClient(
+        host=qdrant_host,
+        port=qdrant_port,
+        collection_name="iris_chunks"
+    )
+    
+    st.session_state.enhanced_qdrant_client = EnhancedIrisQdrantClient(
+        host=qdrant_host,
+        port=qdrant_port,
+        collection_name="enhanced_iris_chunks"
+    )
+    
+    # Check if collections exist and have data
+    check_qdrant_status()
+    
+    # Check Qdrant connection and collection status
+    check_qdrant_status()
+
+if "answer_generator" not in st.session_state:
+    st.session_state.answer_generator = ContextAwareAnswerGenerator()
+
+if "iris_predictor" not in st.session_state:
+    st.session_state.iris_predictor = IrisPredictor()
+
+if "extracted_chunks" not in st.session_state:
+    st.session_state.extracted_chunks = []
+
+if "enhanced_chunks" not in st.session_state:
+    st.session_state.enhanced_chunks = []
+
+if "is_initialized" not in st.session_state:
+    st.session_state.is_initialized = False
+
+if "is_enhanced_initialized" not in st.session_state:
+    st.session_state.is_enhanced_initialized = False
+
+# Main page content
+st.title("Advanced Ayurvedic Iridology Knowledge Base")
+
+# Tab layout
+tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "📊 Statistics", "⚙️ Configuration"])
+
+# First tab - PDF Upload with enhanced processing
+with tabs[0]:
+    st.header("Upload Ayurvedic/Iridology Books")
+    
+    # Enhanced processing toggle
+    processing_mode = st.radio(
+        "Select Processing Mode:",
+        options=["Standard Processing", "Enhanced NLP Processing"],
+        horizontal=True,
+        help="Enhanced mode uses advanced NLP techniques for better extraction"
+    )
+    
+    uploaded_pdf = st.file_uploader(
+        "Select PDF file(s)", 
+        type="pdf", 
+        accept_multiple_files=True,
+        help="Upload Ayurvedic or Iridology books in PDF format"
+    )
+    
+    if uploaded_pdf:
+        # Process each uploaded PDF file
+        for pdf_file in uploaded_pdf:
+            with st.expander(f"Processing: {pdf_file.name}", expanded=True):
+                # Create uploads directory if it doesn't exist
+                os.makedirs("uploads", exist_ok=True)
+                
+                # Save file to uploads directory
+                temp_path = os.path.join("uploads", pdf_file.name)
+                with open(temp_path, "wb") as f:
+                    f.write(pdf_file.read())
+                
+                # Extract iris-related chunks
+                with st.spinner("Extracting iris-related information..."):
+                    start_time = time.time()
+                    
+                    # Display status message
+                    status_placeholder = st.empty()
+                    status_placeholder.info("📄 Analyzing text and image content...")
+                    
+                    # Create a progress bar
+                    progress_bar = st.progress(0)
+                    
+                    # Define a custom callback for progress updates
+                    def update_progress(page_num, total_pages):
+                        progress = min(page_num / total_pages, 1.0)
+                        progress_bar.progress(progress)
+                        status_placeholder.info(f"📄 Processing page {page_num}/{total_pages}...")
+                    
+                    # Choose extraction method based on mode
+                    if processing_mode == "Enhanced NLP Processing":
+                        chunks = extract_structured_chunks(temp_path, progress_callback=update_progress)
+                        st.session_state.enhanced_chunks.extend(chunks)
+                    else:
+                        chunks = extract_iris_chunks(temp_path, progress_callback=update_progress)
+                        st.session_state.extracted_chunks.extend(chunks)
+                    
+                    end_time = time.time()
+                    
+                    # Update status upon completion
+                    progress_bar.progress(1.0)
+                    
+                    # Add extraction method info
+                    if processing_mode == "Enhanced NLP Processing":
+                        ocr_used = any(chunk.get("extraction_method") == "ocr" for chunk in chunks)
+                        if ocr_used:
+                            status_placeholder.success("🔍 Advanced NLP processing with OCR completed")
+                        else:
+                            status_placeholder.success("📄 Advanced NLP processing completed")
+                    else:
+                        ocr_used = any(chunk.get("extraction_method") == "ocr" for chunk in chunks)
+                        if ocr_used:
+                            status_placeholder.success("🔍 OCR processing completed successfully")
+                        else:
+                            status_placeholder.success("📄 Text extraction completed successfully")
+                    
+                    # Display extraction results
+                    st.success(f"✅ Extracted {len(chunks)} iris-related chunks")
+                    st.info(f"⏱️ Processing time: {end_time - start_time:.2f} seconds")
+                    
+                    # Display sample chunks
+                    if chunks:
+                        st.subheader("Sample extracted content:")
+                        for i, chunk in enumerate(chunks[:3]):
+                            with st.container():
+                                st.markdown(f"**Chunk {i+1}** (Page {chunk['page']}):")
+                                st.markdown(f"> {chunk['text']}")
+                                
+                                # Show additional metadata for enhanced chunks
+                                if processing_mode == "Enhanced NLP Processing" and "keywords" in chunk:
+                                    st.markdown(f"Keywords: {', '.join(chunk.get('keywords', []))}")
+                                    st.markdown(f"Relevance Score: {chunk.get('relevance_score', 0):.2f}")
+                                
+                                st.markdown("---")
+                    
+                    # Clean up temp file (commented out to keep file for re-use if needed)
+                    # os.unlink(temp_path)
+        
+        # Store chunks in Qdrant
+        if processing_mode == "Enhanced NLP Processing":
+            if st.session_state.enhanced_chunks and st.button("Store in Enhanced Knowledge Base"):
+                with st.spinner("Storing chunks in enhanced knowledge base..."):
+                    try:
+                        # Initialize collection
+                        st.session_state.enhanced_qdrant_client.create_collection()
+                        
+                        # Store chunks
+                        point_ids = st.session_state.enhanced_qdrant_client.store_chunks(
+                            st.session_state.enhanced_chunks
+                        )
+                        
+                        # Update session state
+                        st.session_state.is_enhanced_initialized = True
+                        
+                        # Success message
+                        st.success(
+                            f"✅ Successfully stored {len(point_ids)} chunks in the enhanced knowledge base"
+                        )
+                        
+                        # Clear stored chunks to avoid duplicates
+                        st.session_state.enhanced_chunks = []
+                        
+                    except Exception as e:
+                        st.error(f"Error storing chunks: {str(e)}")
+        else:
+            if st.session_state.extracted_chunks and st.button("Store in Standard Knowledge Base"):
+                with st.spinner("Storing chunks in standard knowledge base..."):
+                    try:
+                        # Initialize collection
+                        st.session_state.qdrant_client.create_collection()
+                        
+                        # Store chunks
+                        point_ids = st.session_state.qdrant_client.store_chunks(
+                            st.session_state.extracted_chunks
+                        )
+                        
+                        # Update session state
+                        st.session_state.is_initialized = True
+                        
+                        # Success message
+                        st.success(
+                            f"✅ Successfully stored {len(point_ids)} chunks in the standard knowledge base"
+                        )
+                        
+                        # Clear stored chunks to avoid duplicates
+                        st.session_state.extracted_chunks = []
+                        
+                    except Exception as e:
+                        st.error(f"Error storing chunks: {str(e)}")
+
+# Helper functions for displaying search results
+def show_results(results, standard=True):
+    """Show standard search results."""
+    # Display results
+    st.subheader("Results:")
+    
+    if not results:
+        st.info("No matching information found. Try rephrasing your question.")
+        return
+    
+    for i, result in enumerate(results):
+        with st.container():
+            # Create expander for each result
+            with st.expander(f"Result {i+1} (Page {result['page']}) - Relevance: {result['score']:.2f}", expanded=i==0):
+                st.markdown(result['text'])
+                st.caption(f"Source: {Path(result['source']).name}, Page: {result['page']}")
+
+def show_enhanced_results(results):
+    """Show enhanced search results with highlights."""
+    st.subheader("Enhanced Results:")
+    
+    if not results:
+        st.info("No matching information found. Try rephrasing your question or using different keywords.")
+        return
+    
+    for i, result in enumerate(results):
+        score_color = get_score_color(result['score'])
+        
+        with st.container():
+            # Create expander for each result
+            with st.expander(
+                f"Result {i+1} (Page {result['page']}) - " +
+                f"Relevance: {result['score']:.2f}", 
+                expanded=i==0
+            ):
+                # Show highlights if available
+                if "highlights" in result and result["highlights"]:
+                    st.markdown("#### Highlights")
+                    for highlight in result["highlights"]:
+                        st.markdown(highlight)
+                    st.markdown("---")
+                
+                # Show full text
+                st.markdown(result['text'])
+                
+                # Show metadata
+                metadata_cols = st.columns(3)
+                with metadata_cols[0]:
+                    st.markdown(f"Source: {Path(result['source']).name}")
+                with metadata_cols[1]:
+                    st.markdown(f"Page: {result['page']}")
+                with metadata_cols[2]:
+                    st.markdown(f"Method: {result.get('extraction_method', 'standard')}")
+                
+                # Show keywords if available
+                if "keywords" in result and result["keywords"]:
+                    st.markdown(f"**Keywords:** {', '.join(result.get('keywords', []))}")
+
+def show_generated_answer(answer_data):
+    """Show a generated answer from the search results."""
+    # Skip if no answer generated
+    if not answer_data or answer_data["confidence"] == 0:
+        return
+        
+    st.markdown("---")
+    st.subheader("Generated Answer")
+    
+    # Display confidence meter
+    confidence = answer_data["confidence"]
+    confidence_color = get_score_color(confidence)
+    
+    cols = st.columns([3, 1])
+    with cols[0]:
+        st.markdown(f"**Answer Confidence:** {confidence:.2f}")
+    with cols[1]:
+        st.progress(confidence)
+    
+    # Display the answer
+    st.markdown(answer_data["answer"])
+    
+    # Display sources
+    if answer_data.get("sources"):
+        with st.expander("Sources"):
+            for src in answer_data["sources"]:
+                st.markdown(f"- {src['title']}, Page {src['page']}")
+
+def get_score_color(score):
+    """Get color based on score."""
+    if score >= 0.8:
+        return "#28a745"  # Green
+    elif score >= 0.6:
+        return "#17a2b8"  # Blue
+    elif score >= 0.4:
+        return "#ffc107"  # Yellow
+    else:
+        return "#dc3545"  # Red
+
+# Second tab - Knowledge Query with enhanced search
+with tabs[1]:
+    st.header("Query the Iridology Knowledge Base")
+    
+    # Choose query mode
+    query_mode = st.radio(
+        "Select Query Mode:",
+        options=["Standard Search", "Enhanced Search", "Multi-Query Search"],
+        horizontal=True,
+        help="Enhanced search uses advanced algorithms for better results"
+    )
+    
+    # Check if knowledge base is initialized based on mode
+    is_ready = False
+    if query_mode == "Standard Search" and st.session_state.is_initialized:
+        is_ready = True
+    elif (query_mode in ["Enhanced Search", "Multi-Query Search"]):
+        # If enhanced not initialized but standard is, offer to migrate the data
+        if not st.session_state.is_enhanced_initialized and st.session_state.is_initialized:
+            st.info("Enhanced knowledge base is not yet initialized, but standard knowledge base has data.")
+            if st.button("Migrate data from standard to enhanced knowledge base"):
+                with st.spinner("Migrating data to enhanced knowledge base..."):
+                    try:
+                        # Get data from standard knowledge base
+                        standard_results = st.session_state.qdrant_client.search("iris", limit=1000)
+                        if standard_results:
+                            # Create enhanced collection
+                            st.session_state.enhanced_qdrant_client.create_collection()
+                            
+                            # Process and enhance the standard results
+                            enhanced_chunks = []
+                            for chunk in standard_results:
+                                # Create a basic enhanced chunk from standard chunk
+                                enhanced_chunk = {
+                                    "text": chunk["text"],
+                                    "page": chunk["page"],
+                                    "source": chunk["source"],
+                                    "extraction_method": chunk.get("extraction_method", "standard"),
+                                    "keywords": ["iris", "iridology"], # Basic keywords
+                                    "relevance_score": chunk.get("score", 0.7),
+                                    "sentences": [chunk["text"]],
+                                    "sentence_count": 1
+                                }
+                                enhanced_chunks.append(enhanced_chunk)
+                            
+                            # Store in enhanced knowledge base
+                            point_ids = st.session_state.enhanced_qdrant_client.store_chunks(enhanced_chunks)
+                            st.session_state.is_enhanced_initialized = True
+                            st.success(f"Successfully migrated {len(point_ids)} chunks to enhanced knowledge base!")
+                            is_ready = True
+                    except Exception as e:
+                        st.error(f"Error migrating data: {str(e)}")
+        elif st.session_state.is_enhanced_initialized:
+            is_ready = True
+    
+    if not is_ready:
+        st.warning(f"⚠️ {query_mode} knowledge base is empty. Please upload and process PDFs first.")
+    else:
+        query = st.text_input(
+            "Ask a question about iridology:",
+            placeholder="How does the iris pattern reflect liver conditions in iridology?"
+        )
+        
+        if query:
+            with st.spinner("Searching knowledge base..."):
+                try:
+                    # Choose search method based on mode
+                    if query_mode == "Standard Search":
+                        results = st.session_state.qdrant_client.search(query, limit=result_count)
+                        show_results(results, standard=True)
+                    elif query_mode == "Enhanced Search":
+                        results = st.session_state.enhanced_qdrant_client.hybrid_search(query, 
+                                                                                      limit=result_count, 
+                                                                                      min_score=min_relevance)
+                        show_enhanced_results(results)
+                    elif query_mode == "Multi-Query Search":
+                        results = st.session_state.enhanced_qdrant_client.multi_query_search(query, limit=result_count)
+                        show_enhanced_results(results)
+                        
+                        # Generate context-aware answer
+                        answer_data = st.session_state.answer_generator.generate_answer(query, results)
+                        show_generated_answer(answer_data)
+                        
+                except Exception as e:
+                    st.error(f"Error searching knowledge base: {str(e)}")
+
+# Function definitions moved to the top of the file
+    """Show enhanced search results with highlights."""
+    st.subheader("Enhanced Results:")
+    
+    if not results:
+        st.info("No matching information found. Try rephrasing your question or using different keywords.")
+        return
+    
+    for i, result in enumerate(results):
+        score_color = get_score_color(result['score'])
+        
+        with st.container():
+            # Create expander for each result
+            with st.expander(
+                f"Result {i+1} (Page {result['page']}) - " +
+                f"Relevance: {result['score']:.2f}", 
+                expanded=i==0
+            ):
+                # Show highlights if available
+                if "highlights" in result and result["highlights"]:
+                    st.markdown("#### Highlights")
+                    for highlight in result["highlights"]:
+                        st.markdown(highlight)
+                    st.markdown("---")
+                
+                # Show full text
+                st.markdown(result['text'])
+                
+                # Show metadata
+                metadata_cols = st.columns(3)
+                with metadata_cols[0]:
+                    st.markdown(f"Source: {Path(result['source']).name}")
+                with metadata_cols[1]:
+                    st.markdown(f"Page: {result['page']}")
+                with metadata_cols[2]:
+                    st.markdown(f"Method: {result.get('extraction_method', 'standard')}")
+                
+                # Show keywords if available
+                if "keywords" in result and result["keywords"]:
+                    st.markdown(f"**Keywords:** {', '.join(result.get('keywords', []))}")
+
+def show_generated_answer(answer_data):
+    """Show a generated answer from the search results."""
+    # Skip if no answer generated
+    if not answer_data or answer_data["confidence"] == 0:
+        return
+        
+    st.markdown("---")
+    st.subheader("Generated Answer")
+    
+    # Display confidence meter
+    confidence = answer_data["confidence"]
+    confidence_color = get_score_color(confidence)
+    
+    cols = st.columns([3, 1])
+    with cols[0]:
+        st.markdown(f"**Answer Confidence:** {confidence:.2f}")
+    with cols[1]:
+        st.progress(confidence)
+    
+    # Display the answer
+    st.markdown(answer_data["answer"])
+    
+    # Display sources
+    if answer_data.get("sources"):
+        with st.expander("Sources"):
+            for src in answer_data["sources"]:
+                st.markdown(f"- {src['title']}, Page {src['page']}")
+
+def get_score_color(score):
+    """Get color based on score."""
+    if score >= 0.8:
+        return "#28a745"  # Green
+    elif score >= 0.6:
+        return "#17a2b8"  # Blue
+    elif score >= 0.4:
+        return "#ffc107"  # Yellow
+    else:
+        return "#dc3545"  # Red
+
+# Re-implement the other tabs from the original app.py
+# Third tab - Iris Analysis
+with tabs[2]:
+    st.header("Iris Image Analysis")
+    
+    st.info(
+        "Upload an iris image to analyze it and generate relevant health queries. "
+        "This feature uses computer vision to identify potential health indicators in the iris."
+    )
+    
+    uploaded_image = st.file_uploader(
+        "Upload iris image", 
+        type=["jpg", "jpeg", "png"],
+        help="Upload a clear image of an iris"
+    )
+    
+    if uploaded_image:
+        # Save temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+            tmp_file.write(uploaded_image.read())
+            temp_path = tmp_file.name
+        
+        try:
+            # Process iris image
+            with st.spinner("Analyzing iris image..."):
+                results = st.session_state.iris_predictor.process_iris_image(temp_path)
+                
+                if "error" in results:
+                    st.error(results["error"])
+                else:
+                    # Display original image with iris outline
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.subheader("Uploaded Image")
+                        st.image(results["image"], use_column_width=True)
+                    
+                    with col2:
+                        st.subheader("Analysis Summary")
+                        
+                        # Display health indicators
+                        for zone, info in results["analysis"]["zones"].items():
+                            status_color = "green" if info["condition"] == "normal" else "orange" if info["condition"] == "stressed" else "red"
+                            st.markdown(
+                                f"**{zone.capitalize()}:** "
+                                f"<span style='color:{status_color}'>{info['condition']}</span> "
+                                f"(confidence: {info['confidence']:.0%})",
+                                unsafe_allow_html=True
+                            )
+                        
+                        st.markdown(f"**Overall Health:** {results['analysis']['overall_health'].capitalize()}")
+                    
+                    # Generate and display queries
+                    st.subheader("Suggested Queries")
+                    
+                    query_cols = st.columns(2)
+                    for i, query in enumerate(results["queries"]):
+                        col_idx = i % 2
+                        with query_cols[col_idx]:
+                            if st.button(f"🔍 {query}", key=f"query_{i}"):
+                                # Set the query in the query tab
+                                st.session_state.current_query = query
+                                # Switch to the query tab
+                                st.experimental_set_query_params(tab="query")
+                                st.experimental_rerun()
+                    
+                    # Run selected query if set
+                    if hasattr(st.session_state, "current_query"):
+                        query = st.session_state.current_query
+                        
+                        # Check which knowledge base to use
+                        if st.session_state.is_enhanced_initialized:
+                            with st.spinner(f"Searching enhanced knowledge base: {query}"):
+                                # Search with enhanced client
+                                results = st.session_state.enhanced_qdrant_client.multi_query_search(query, limit=3)
+                                
+                                # Generate answer
+                                answer_data = st.session_state.answer_generator.generate_answer(query, results)
+                                
+                                # Display results
+                                st.subheader("Knowledge Base Results:")
+                                if not results:
+                                    st.info("No matching information found in the knowledge base.")
+                                else:
+                                    show_enhanced_results(results)
+                                    show_generated_answer(answer_data)
+                                
+                        elif st.session_state.is_initialized:
+                            with st.spinner(f"Searching knowledge base: {query}"):
+                                # Search with standard client
+                                results = st.session_state.qdrant_client.search(query, limit=3)
+                                
+                                # Display results
+                                st.subheader("Knowledge Base Results:")
+                                if not results:
+                                    st.info("No matching information found in the knowledge base.")
+                                else:
+                                    show_results(results)
+                        else:
+                            st.warning("Please initialize a knowledge base by uploading and processing PDFs first.")
+                    
+        except Exception as e:
+            st.error(f"Error analyzing iris image: {str(e)}")
+        finally:
+            # Clean up temp file
+            os.unlink(temp_path)
+
+# Fourth tab - Statistics with enhanced metrics
+with tabs[3]:
+    st.header("Knowledge Base Statistics")
+    
+    # Create tabs for different stats
+    stat_tabs = st.tabs(["Overview", "Content Analysis", "Performance Metrics"])
+    
+    with stat_tabs[0]:
+        # Display basic stats
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Standard Chunks", len(st.session_state.extracted_chunks))
+        
+        with col2:
+            st.metric("Enhanced Chunks", len(st.session_state.enhanced_chunks))
+        
+        with col3:
+            status1 = "Initialized" if st.session_state.is_initialized else "Not Initialized"
+            status2 = "Initialized" if st.session_state.is_enhanced_initialized else "Not Initialized"
+            st.metric("Knowledge Base Status", f"Standard: {status1}\nEnhanced: {status2}")
+
+        # Display source breakdown
+        if st.session_state.extracted_chunks or st.session_state.enhanced_chunks:
+            # Get unique sources
+            sources = {}
+            
+            # Add from standard chunks
+            for chunk in st.session_state.extracted_chunks:
+                source = Path(chunk.get('source', '')).name
+                if source in sources:
+                    sources[source] = sources[source] + 1
+                else:
+                    sources[source] = 1
+                    
+            # Add from enhanced chunks
+            for chunk in st.session_state.enhanced_chunks:
+                source = Path(chunk.get('source', '')).name
+                if source in sources:
+                    sources[source] = sources[source] + 1
+                else:
+                    sources[source] = 1
+            
+            # Display as a table
+            st.subheader("Source Distribution")
+            source_data = {"Source": list(sources.keys()), "Chunks": list(sources.values())}
+            st.dataframe(source_data, use_container_width=True)
+            
+            # Add a bar chart
+            st.bar_chart(sources)
+    
+    with stat_tabs[1]:
+        st.subheader("Content Analysis")
+        
+        # Display extraction methods breakdown if enhanced chunks exist
+        if st.session_state.enhanced_chunks:
+            # Count by extraction method
+            extraction_methods = {}
+            for chunk in st.session_state.enhanced_chunks:
+                method = chunk.get('extraction_method', 'unknown')
+                if method in extraction_methods:
+                    extraction_methods[method] += 1
+                else:
+                    extraction_methods[method] = 1
+            
+            # Display as a pie chart
+            st.subheader("Extraction Methods")
+            
+            extraction_df = pd.DataFrame({
+                'Method': list(extraction_methods.keys()),
+                'Count': list(extraction_methods.values())
+            })
+            
+            st.bar_chart(extraction_methods)
+            st.dataframe(extraction_df, use_container_width=True)
+            
+            # Show relevance score distribution
+            if any('relevance_score' in chunk for chunk in st.session_state.enhanced_chunks):
+                relevance_scores = [chunk.get('relevance_score', 0) for chunk in st.session_state.enhanced_chunks 
+                                   if 'relevance_score' in chunk]
+                
+                st.subheader("Relevance Score Distribution")
+                fig, ax = plt.subplots()
+                ax.hist(relevance_scores, bins=10, alpha=0.7)
+                ax.set_xlabel('Relevance Score')
+                ax.set_ylabel('Count')
+                st.pyplot(fig)
+                
+                # Display average relevance
+                st.metric("Average Relevance Score", f"{sum(relevance_scores) / len(relevance_scores):.2f}")
+    
+    with stat_tabs[2]:
+        st.subheader("Performance Metrics")
+        
+        # Create some demo metrics (replace with real measurements in production)
+        st.info("These are sample metrics for demonstration. Implement actual measurements in production.")
+        
+        # Create a dataframe with performance metrics
+        metrics_data = {
+            'Processing Type': ['Standard', 'Enhanced NLP'],
+            'Average Processing Time (sec/page)': [0.8, 1.5],
+            'Content Extraction Rate (chunks/page)': [2.3, 4.1],
+            'Average Relevance Score': [0.65, 0.78],
+            'Query Performance (ms)': [120, 150]
+        }
+        
+        metrics_df = pd.DataFrame(metrics_data)
+        st.dataframe(metrics_df, use_container_width=True)
+
+# Fifth tab - Configuration
+with tabs[4]:
+    st.header("Advanced Configuration")
+    
+    st.warning("⚠️ Changes to these settings may affect the performance of the knowledge base.")
+    
+    with st.form("config_form"):
+        st.subheader("Knowledge Base Configuration")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            collection_name = st.text_input("Collection Name", "iris_chunks", 
+                                          help="Name of the Qdrant collection")
+            vector_model = st.selectbox("Vector Model", 
+                                      ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "multi-qa-MiniLM-L6-cos-v1"],
+                                      help="Select the embedding model for vector search")
+        
+        with col2:
+            distance_metric = st.selectbox("Distance Metric", 
+                                         ["COSINE", "DOT", "EUCLIDEAN"],
+                                         help="Vector distance metric for similarity search")
+            page_step = st.number_input("OCR Page Step", min_value=1, max_value=10, value=5,
+                                       help="Process every N pages for OCR to balance speed and coverage")
+        
+        st.subheader("NLP Settings")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            min_paragraph_length = st.number_input("Min Paragraph Length", 
+                                                 min_value=10, max_value=100, value=25,
+                                                 help="Minimum word count for paragraphs")
+            duplicate_threshold = st.slider("Duplicate Detection Threshold", 
+                                          min_value=0.3, max_value=0.9, value=0.7, step=0.05,
+                                          help="Similarity threshold for duplicate detection")
+        
+        with col4:
+            keyword_boost = st.slider("Keyword Boost", 
+                                    min_value=0.0, max_value=0.5, value=0.1, step=0.05,
+                                    help="Boost factor for keyword matches")
+            nlp_model = st.selectbox("NLP Model", 
+                                   ["en_core_web_sm", "en_core_web_md"],
+                                   help="spaCy model for NLP processing")
+        
+        # JSON configuration export/import
+        st.subheader("Configuration Import/Export")
+        
+        config_json = st.text_area("Configuration JSON", 
+                                  value=json.dumps({
+                                      "collection_name": collection_name,
+                                      "vector_model": vector_model,
+                                      "distance_metric": distance_metric,
+                                      "page_step": page_step,
+                                      "min_paragraph_length": min_paragraph_length,
+                                      "duplicate_threshold": duplicate_threshold,
+                                      "keyword_boost": keyword_boost,
+                                      "nlp_model": nlp_model
+                                  }, indent=2),
+                                  height=200)
+        
+        # Submit button
+        submitted = st.form_submit_button("Apply Configuration")
+        
+        if submitted:
+            st.success("✅ Configuration applied successfully!")
+            st.info("Note: Some changes may require restarting the application to take effect.")

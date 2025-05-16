@@ -118,6 +118,118 @@ class IrisPredictor:
             
         return queries
     
+    def generate_enhanced_queries(self, analysis: Dict[str, Any], qdrant_client=None) -> List[str]:
+        """
+        Generate more relevant and contextual queries based on iris analysis and knowledge base.
+        
+        Args:
+            analysis: Results of iris analysis
+            qdrant_client: Optional Qdrant client for knowledge base lookup
+            
+        Returns:
+            List of contextually relevant queries
+        """
+        # Start with basic queries
+        basic_queries = self.generate_queries(analysis)
+        
+        if qdrant_client is None:
+            return basic_queries
+            
+        # Create enriched queries by leveraging the knowledge base
+        enriched_queries = []
+        seed_terms = set()
+        
+        # Extract key terms based on analysis
+        for zone, info in analysis["zones"].items():
+            if info["condition"] != "normal":
+                # Use zone and condition as seed terms
+                seed_terms.add(zone)
+                seed_terms.add(info["condition"])
+                
+                # Create enrichment queries to search knowledge base
+                enrichment_query = f"{zone} {info['condition']} iridology"
+                
+                try:
+                    # Search for related content in the knowledge base
+                    results = qdrant_client.search(enrichment_query, limit=3)
+                    
+                    if results:
+                        # Extract key terms from search results
+                        for result in results:
+                            # Generate a specific query based on this result
+                            context = result["text"][:200]  # Use first 200 chars as context
+                            
+                            # Extract key phrases from the context
+                            phrases = self._extract_key_phrases(context)
+                            
+                            for phrase in phrases:
+                                if len(phrase) > 3 and phrase.lower() not in ("what", "when", "where", "which", "this", "that"):
+                                    related_query = f"What is the relationship between {zone} and {phrase} in iridology?"
+                                    if related_query not in enriched_queries and related_query not in basic_queries:
+                                        enriched_queries.append(related_query)
+                                        
+                            # Create a treatment-focused query
+                            if info["condition"] in ("stressed", "inflamed", "weak", "compromised"):
+                                treatment_query = f"Ayurvedic remedies for {info['condition']} {zone} as shown in iris"
+                                if treatment_query not in enriched_queries and treatment_query not in basic_queries:
+                                    enriched_queries.append(treatment_query)
+                except Exception as e:
+                    print(f"Error enriching queries with knowledge base: {str(e)}")
+        
+        # Combine basic and enriched queries, prioritizing enriched ones
+        combined_queries = []
+        
+        # Limit to reasonable number of queries
+        max_queries = 8
+        
+        # Add most relevant enriched queries first
+        for query in enriched_queries[:max_queries//2]:
+            if query not in combined_queries and len(combined_queries) < max_queries:
+                combined_queries.append(query)
+        
+        # Add basic queries if we still have space
+        for query in basic_queries:
+            if query not in combined_queries and len(combined_queries) < max_queries:
+                combined_queries.append(query)
+                
+        # Fill any remaining slots with enriched queries
+        for query in enriched_queries[max_queries//2:]:
+            if query not in combined_queries and len(combined_queries) < max_queries:
+                combined_queries.append(query)
+        
+        return combined_queries
+    
+    def _extract_key_phrases(self, text: str) -> List[str]:
+        """Extract key phrases from text for query generation."""
+        # Simple implementation using common NLP techniques
+        import re
+        from collections import Counter
+        
+        # Remove special characters and normalize
+        text = re.sub(r'[^\w\s]', ' ', text.lower())
+        words = text.split()
+        
+        # Remove common stop words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'about', 'as', 'of'}
+        filtered_words = [word for word in words if word not in stop_words and len(word) > 3]
+        
+        # Get most common words as potential key terms
+        word_counts = Counter(filtered_words)
+        common_words = [word for word, _ in word_counts.most_common(5)]
+        
+        # Extract bigrams (pairs of adjacent words)
+        bigrams = []
+        for i in range(len(words) - 1):
+            if words[i] not in stop_words and words[i+1] not in stop_words:
+                bigram = f"{words[i]} {words[i+1]}"
+                if len(bigram) > 6:  # Avoid very short bigrams
+                    bigrams.append(bigram)
+        
+        # Combine single words and bigrams
+        key_phrases = common_words + bigrams
+        
+        return key_phrases[:7]  # Limit to top 7 phrases
+    
     def process_iris_image(self, image_path: str) -> Dict[str, Any]:
         """
         Process an iris image and return analysis and queries.

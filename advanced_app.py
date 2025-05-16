@@ -496,9 +496,9 @@ with tabs[2]:
                             if st.button(f"🔍 {query}", key=f"query_{i}"):
                                 # Set the query in the query tab
                                 st.session_state.current_query = query
-                                # Switch to the query tab
-                                st.experimental_set_query_params(tab="query")
-                                st.experimental_rerun()
+                                # Modern way to switch tabs with rerun
+                                st.query_params["tab"] = "query"
+                                st.rerun()
                     
                     # Run selected query if set
                     if hasattr(st.session_state, "current_query"):

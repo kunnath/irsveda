@@ -4,6 +4,7 @@ from io import BytesIO
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 # Import FPDF conditionally to avoid errors if the module is not installed
 try:
     from fpdf import FPDF
@@ -24,11 +25,18 @@ class IrisReportGenerator:
         self.margin = 10
     
     def _fig_to_img(self, fig):
-        """Convert a matplotlib figure to a bytes object."""
-        buf = BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        return buf
+        """Convert a matplotlib figure to a temporary file path for FPDF."""
+        import tempfile
+        
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        temp_filename = temp_file.name
+        temp_file.close()
+        
+        # Save the figure to the temporary file
+        fig.savefig(temp_filename, format='png', dpi=300, bbox_inches='tight')
+        
+        return temp_filename
     
     def _fig_to_base64(self, fig):
         """Convert a matplotlib figure to base64 string for HTML embedding."""
@@ -38,17 +46,36 @@ class IrisReportGenerator:
         img_str = base64.b64encode(buf.read()).decode('utf-8')
         return img_str
     
-    def _np_array_to_img(self, array):
-        """Convert a numpy array image to bytes."""
-        img = Image.fromarray(array.astype('uint8'))
-        buf = BytesIO()
-        img.save(buf, format='PNG')
-        buf.seek(0)
-        return buf
+    def _np_array_to_img(self, array_or_img):
+        """Convert a numpy array or PIL Image to a temporary file path for FPDF."""
+        import tempfile
+        
+        if isinstance(array_or_img, np.ndarray):
+            img = Image.fromarray(array_or_img.astype('uint8'))
+        elif isinstance(array_or_img, Image.Image):
+            img = array_or_img
+        else:
+            raise ValueError(f"Expected numpy array or PIL Image, got {type(array_or_img)}")
+            
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        temp_filename = temp_file.name
+        temp_file.close()
+        
+        # Save the image to the temporary file
+        img.save(temp_filename, format='PNG')
+        
+        return temp_filename
     
-    def _np_array_to_base64(self, array):
-        """Convert a numpy array image to base64 string for HTML embedding."""
-        img = Image.fromarray(array.astype('uint8'))
+    def _np_array_to_base64(self, array_or_img):
+        """Convert a numpy array or PIL Image to base64 string for HTML embedding."""
+        if isinstance(array_or_img, np.ndarray):
+            img = Image.fromarray(array_or_img.astype('uint8'))
+        elif isinstance(array_or_img, Image.Image):
+            img = array_or_img
+        else:
+            raise ValueError(f"Expected numpy array or PIL Image, got {type(array_or_img)}")
+            
         buf = BytesIO()
         img.save(buf, format='PNG')
         buf.seek(0)
@@ -122,24 +149,21 @@ class IrisReportGenerator:
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=15)
         
-        # Add fonts
-        pdf.add_font('DejaVu', '', os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                                                'fonts/DejaVuSans.ttf'), uni=True)
-        pdf.add_font('DejaVu', 'B', os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                                                'fonts/DejaVuSans-Bold.ttf'), uni=True)
+        # Use built-in fonts instead of DejaVu fonts to avoid font issues
+        # Note: Built-in fonts don't support unicode characters
         
         # Title and header
-        pdf.set_font('DejaVu', 'B', 20)
+        pdf.set_font('helvetica', 'B', 20)
         pdf.cell(0, 10, 'Iris Zone Analysis Report', 0, 1, 'C')
-        pdf.set_font('DejaVu', '', 11)
+        pdf.set_font('helvetica', '', 11)
         pdf.cell(0, 10, f'Generated on {datetime.now().strftime("%Y-%m-%d at %H:%M")}', 0, 1, 'C')
         pdf.ln(5)
         
         # Add user info if provided
         if user_info:
-            pdf.set_font('DejaVu', 'B', 12)
+            pdf.set_font('helvetica', 'B', 12)
             pdf.cell(0, 10, 'Client Information', 0, 1, 'L')
-            pdf.set_font('DejaVu', '', 11)
+            pdf.set_font('helvetica', '', 11)
             
             for key, value in user_info.items():
                 pdf.cell(40, 10, f"{key}:", 0, 0, 'L')
@@ -147,11 +171,11 @@ class IrisReportGenerator:
             pdf.ln(5)
         
         # Add iris images
-        pdf.set_font('DejaVu', 'B', 14)
+        pdf.set_font('helvetica', 'B', 14)
         pdf.cell(0, 10, 'Iris Analysis Visualizations', 0, 1, 'L')
         
         # Original and zone map images side by side
-        pdf.set_font('DejaVu', '', 10)
+        pdf.set_font('helvetica', '', 10)
         img_width = (self.width - 2*self.margin) / 2 - 5  # Allow some spacing
         
         # Original image
@@ -170,9 +194,9 @@ class IrisReportGenerator:
         pdf.ln(75)
         
         # Overall health summary
-        pdf.set_font('DejaVu', 'B', 14)
+        pdf.set_font('helvetica', 'B', 14)
         pdf.cell(0, 10, 'Health Summary', 0, 1, 'L')
-        pdf.set_font('DejaVu', '', 11)
+        pdf.set_font('helvetica', '', 11)
         
         overall_health = zone_results['health_summary']['overall_health'].capitalize()
         pdf.cell(0, 10, f'Overall Balance: {overall_health}', 0, 1, 'L')
@@ -195,50 +219,50 @@ class IrisReportGenerator:
             dosha_balance = zone_results['health_summary']['dosha_balance']
             primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0] if dosha_balance else "unknown"
             
-            pdf.set_font('DejaVu', 'B', 14)
+            pdf.set_font('helvetica', 'B', 14)
             pdf.cell(0, 10, 'Dosha Interpretation', 0, 1, 'L')
-            pdf.set_font('DejaVu', '', 11)
+            pdf.set_font('helvetica', '', 11)
             
             if primary_dosha == "vata":
                 pdf.multi_cell(0, 7, "Vata Dominant Iris\n\n"
                               "The iris shows signs of Vata dominance, which relates to the air and ether elements. "
                               "This often manifests as:\n"
-                              "• Heightened nervous system activity\n"
-                              "• Potential for dryness and variability in systems\n"
-                              "• Need for grounding and stability\n\n"
+                              "- Heightened nervous system activity\n"
+                              "- Potential for dryness and variability in systems\n"
+                              "- Need for grounding and stability\n\n"
                               "Balancing Suggestions:\n"
-                              "• Regular routines and rest patterns\n"
-                              "• Warm, nourishing, and grounding foods\n"
-                              "• Gentle oil massage (abhyanga) with sesame oil\n"
-                              "• Meditation and stress reduction practices")
+                              "- Regular routines and rest patterns\n"
+                              "- Warm, nourishing, and grounding foods\n"
+                              "- Gentle oil massage (abhyanga) with sesame oil\n"
+                              "- Meditation and stress reduction practices")
             elif primary_dosha == "pitta":
                 pdf.multi_cell(0, 7, "Pitta Dominant Iris\n\n"
                               "The iris shows signs of Pitta dominance, which relates to the fire and water elements. "
                               "This often manifests as:\n"
-                              "• Strong digestive and metabolic functions\n"
-                              "• Tendency toward heat and inflammation\n"
-                              "• Potential for intensity and sharpness in bodily processes\n\n"
+                              "- Strong digestive and metabolic functions\n"
+                              "- Tendency toward heat and inflammation\n"
+                              "- Potential for intensity and sharpness in bodily processes\n\n"
                               "Balancing Suggestions:\n"
-                              "• Cooling foods and herbs\n"
-                              "• Avoiding excessive heat, sun exposure, and spicy foods\n"
-                              "• Regular exercise that's not too intense\n"
-                              "• Calming and cooling practices like moonlight walks")
+                              "- Cooling foods and herbs\n"
+                              "- Avoiding excessive heat, sun exposure, and spicy foods\n"
+                              "- Regular exercise that's not too intense\n"
+                              "- Calming and cooling practices like moonlight walks")
             elif primary_dosha == "kapha":
                 pdf.multi_cell(0, 7, "Kapha Dominant Iris\n\n"
                               "The iris shows signs of Kapha dominance, which relates to the earth and water elements. "
                               "This often manifests as:\n"
-                              "• Stable energy and strong immunity\n"
-                              "• Potential for congestion or sluggishness\n"
-                              "• Well-developed structural elements in the body\n\n"
+                              "- Stable energy and strong immunity\n"
+                              "- Potential for congestion or sluggishness\n"
+                              "- Well-developed structural elements in the body\n\n"
                               "Balancing Suggestions:\n"
-                              "• Regular stimulating exercise\n"
-                              "• Warm, light, and spiced foods\n"
-                              "• Dry brushing and invigorating practices\n"
-                              "• Varied routines to prevent stagnation")
+                              "- Regular stimulating exercise\n"
+                              "- Warm, light, and spiced foods\n"
+                              "- Dry brushing and invigorating practices\n"
+                              "- Varied routines to prevent stagnation")
         
         # Detailed zone analysis
         pdf.add_page()
-        pdf.set_font('DejaVu', 'B', 14)
+        pdf.set_font('helvetica', 'B', 14)
         pdf.cell(0, 10, 'Detailed Zone Analysis', 0, 1, 'L')
         
         # Loop through each zone and add its details
@@ -247,10 +271,10 @@ class IrisReportGenerator:
             health_condition = zone_data["health_indication"]["condition"]
             confidence = zone_data["health_indication"]["confidence"]
             
-            pdf.set_font('DejaVu', 'B', 12)
+            pdf.set_font('helvetica', 'B', 12)
             pdf.cell(0, 10, f"{zone_display_name} - {health_condition.capitalize()}", 0, 1, 'L')
             
-            pdf.set_font('DejaVu', '', 11)
+            pdf.set_font('helvetica', '', 11)
             pdf.multi_cell(0, 7, f"Corresponds to: {', '.join(zone_data['ayurvedic_mapping']['systems'])}")
             pdf.multi_cell(0, 7, f"Description: {zone_data['ayurvedic_mapping']['description']}")
             pdf.multi_cell(0, 7, f"Condition: {health_condition.capitalize()} (Confidence: {confidence:.1%})")
@@ -266,14 +290,25 @@ class IrisReportGenerator:
             pdf.ln(5)
             
         # Disclaimer
-        pdf.set_font('DejaVu', 'I', 9)
+        pdf.set_font('helvetica', 'I', 9)
         pdf.ln(10)
         pdf.multi_cell(0, 5, "Disclaimer: This iris analysis is provided for educational and informational purposes only. "
                     "It is not intended to diagnose, treat, cure, or prevent any disease. "
                     "Please consult with a qualified healthcare provider for medical advice.")
 
-        # Return PDF as bytes
-        return pdf.output(dest='S').encode('latin1')
+        # Get PDF as bytes
+        pdf_bytes = pdf.output(dest='S').encode('latin1')
+        
+        # Clean up temporary files
+        temp_files = []
+        if 'original_img' in locals(): temp_files.append(original_img)
+        if 'zone_map_img' in locals(): temp_files.append(zone_map_img)
+        if 'dosha_chart' in locals() and dosha_chart: temp_files.append(dosha_chart)
+        if 'health_chart' in locals() and health_chart: temp_files.append(health_chart)
+        
+        self._cleanup_temp_files(temp_files)
+        
+        return pdf_bytes
         
     def generate_html_report(self, zone_results: Dict[str, Any], user_info: Dict[str, str] = None) -> str:
         """
@@ -573,3 +608,13 @@ class IrisReportGenerator:
         """
         
         return html
+    
+    def _cleanup_temp_files(self, file_list):
+        """Clean up temporary files created during report generation."""
+        import os
+        for file_path in file_list:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Warning: Could not remove temporary file {file_path}: {e}")

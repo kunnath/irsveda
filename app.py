@@ -238,9 +238,9 @@ with tabs[2]:
                         if st.button(f"🔍 {query}"):
                             # Set the query in the second tab
                             st.session_state.current_query = query
-                            # Switch to the second tab
-                            st.experimental_set_query_params(tab="query")
-                            st.experimental_rerun()
+                            # Switch to the second tab using modern Streamlit approach
+                            st.query_params["tab"] = "query"
+                            st.rerun()
                     
                     # Run selected query if set
                     if hasattr(st.session_state, "current_query") and st.session_state.is_initialized:
