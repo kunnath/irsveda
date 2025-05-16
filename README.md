@@ -1,12 +1,14 @@
-# AyushIris: Ayurvedic Iridology Knowledge Base
+# IridoVeda: Ayurvedic Iridology Knowledge Base
 
 <p align="center">
-  <img src="irs.png" alt="AyushIris Logo" width="300">
+  <img src="irs.png" alt="IridoVeda Logo" width="300">
 </p>
 
 ## Overview
 
-AyushIris is a Streamlit application that extracts iris-related information from Ayurvedic and Iridology books, stores it as vector embeddings in Qdrant, and provides a query interface to access this knowledge. The application can also analyze iris images to generate relevant health queries.
+IridoVeda is a Streamlit application that extracts iris-related information from Ayurvedic and Iridology books, stores it as vector embeddings in Qdrant, and provides a query interface to access this knowledge. The application can also analyze iris images to generate relevant health queries.
+
+Powered by [Dinexora](https://www.dinexora.de)
 
 ## Features
 
@@ -58,21 +60,27 @@ pip install -r requirements.txt
 ## Project Structure
 
 ```
-irisayush/
-├── app.py                 # Streamlit UI
-├── pdf_extractor.py       # Extract & filter iris text
-├── iris_qdrant.py         # Qdrant vector DB integration
-├── iris_predictor.py      # ML model for iris image analysis
-├── ocr_pdf.py             # OCR processing for scanned PDFs
-├── docker-compose.yml     # Multi-container Docker setup
-├── Dockerfile             # Container configuration
-├── run.sh                 # Local startup script
-├── static/                # Static assets (logos, etc.)
-└── uploads/               # Directory for uploaded PDFs
-├── qdrant_client.py       # Embedding & vector DB interface
-├── requirements.txt       # Python dependencies
-├── Dockerfile             # Docker build instructions
-└── docker-compose.yml     # Docker Compose configuration
+iridoveda/
+├── app.py                      # Basic Streamlit UI
+├── advanced_app.py             # Advanced Streamlit UI with enhanced features
+├── pdf_extractor.py            # Extract & filter iris text
+├── enhanced_pdf_extractor.py   # Advanced text extraction with NLP
+├── iris_qdrant.py              # Basic Qdrant vector DB integration
+├── enhanced_iris_qdrant.py     # Advanced vector search capabilities
+├── iris_predictor.py           # ML model for iris image analysis
+├── iris_zone_analyzer.py       # Advanced zone-based iris analysis
+├── iris_report_generator.py    # PDF report generation
+├── context_aware_answers.py    # Generate answers from search results
+├── ocr_pdf.py                  # OCR processing for scanned PDFs
+├── docker-compose.yml          # Multi-container Docker setup
+├── Dockerfile                  # Container configuration
+├── run.sh                      # Basic mode startup script
+├── run_enhanced.sh             # Enhanced mode startup script
+├── static/                     # Static assets (logos, etc.)
+├── uploads/                    # Directory for uploaded PDFs
+├── fonts/                      # Fonts for PDF report generation
+├── requirements.txt            # Python dependencies
+└── docker-compose.yml          # Docker Compose configuration
 ```
 
 ## Setup and Installation
@@ -101,7 +109,11 @@ docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
 4. Run the Streamlit app:
 
 ```bash
+# For basic version:
 streamlit run app.py
+
+# For enhanced version (recommended):
+streamlit run advanced_app.py
 ```
 
 ### Using Docker Compose
@@ -109,28 +121,51 @@ streamlit run app.py
 1. Build and start the containers:
 
 ```bash
-docker-compose up --build
+# Build the containers
+docker compose build
+
+# Start in detached mode
+docker compose up -d
+
+# View logs if needed
+docker compose logs -f
 ```
 
 2. Access the application at `http://localhost:8501`
 
+3. Stop the containers when done:
+
+```bash
+docker compose down
+```
+
 ## Usage
 
 1. Upload Ayurvedic/Iridology books in PDF format
-2. Process the PDFs to extract iris-related information
+2. Process the PDFs to extract iris-related information (choose between standard and enhanced processing)
 3. Store the extracted information in the knowledge base
 4. Query the knowledge base with natural language questions
-5. (Optional) Upload iris images for analysis and recommendations
+5. Upload iris images for analysis and recommendations
+6. Generate detailed iris zone analysis reports
+7. Explore statistics and insights about your knowledge base
 
-## Future Enhancements
+## Advanced Features
 
-- OCR support for image-based PDFs
-- Multi-language support (Sanskrit, Malayalam, etc.)
-- Advanced iris image analysis with deep learning
-- Integration with electronic health records
-- Mobile-friendly UI for field use by practitioners
+- **Enhanced NLP Processing**: More accurate text extraction with semantic understanding
+- **Multi-Query Search**: Improved search accuracy through query expansion
+- **Iris Zone Analysis**: Detailed mapping of iris zones to body systems
+- **PDF Report Generation**: Comprehensive reports with Ayurvedic insights
+- **Context-Aware Answers**: AI-generated responses synthesized from multiple sources
+- **Statistical Insights**: Analyze the content of your knowledge base
+
+## Contact & Support
+
+For questions, support, or custom implementations:
+- 📧 Email: [contact@dinexora.de](mailto:contact@dinexora.de)
+- 🌐 Website: [www.dinexora.de](https://www.dinexora.de)
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-# irsveda
+
+# IridoVeda - Powered by Dinexora
