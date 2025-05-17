@@ -137,19 +137,33 @@ def check_qdrant_status():
 
 # Page title and configuration
 st.set_page_config(
-    page_title="irsveda - Advanced Iridology Knowledge Base",
+    page_title="IridoVeda",
     page_icon="👁️",
     layout="wide"
 )
 
 # Create sidebar with improved UI
-st.sidebar.title("irsveda")
+st.sidebar.title("IridoVeda")
 st.sidebar.image("static/iris_logo.png", use_container_width=True)
 st.sidebar.markdown("---")
 st.sidebar.info(
     "This application extracts iris-related information from Ayurvedic/Iridology "
     "books and allows you to query the knowledge base using advanced NLP."
 )
+st.sidebar.markdown("---")
+st.sidebar.markdown("Powered by [Dinexora](https://www.dinexora.de)")
+
+# Add contact section
+with st.sidebar.expander("Contact Us"):
+    st.markdown("""
+    **Get in touch with us**
+    
+    Have questions or need help with IridoVeda? Feel free to contact us.
+    
+    📧 Email: [contact@dinexora.de](mailto:contact@dinexora.de)
+    
+    🌐 Website: [www.dinexora.de](https://www.dinexora.de)
+    """)
 
 # Add settings in sidebar
 with st.sidebar.expander("Advanced Settings"):
@@ -206,7 +220,7 @@ if "is_initialized" not in st.session_state:
 if "is_enhanced_initialized" not in st.session_state:
     st.session_state.is_enhanced_initialized = False
 # Main page content
-st.title("Advanced Ayurvedic Iridology Knowledge Base")
+st.title("IridoVeda")
 
 # Tab layout
 tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "🔬 IrisZone", "📊 Statistics", "⚙️ Configuration"])
@@ -629,83 +643,203 @@ with tabs[3]:
                     with zone_vis_tabs[2]:
                         st.subheader("Ayurvedic Interpretation")
                         
-                        # Summary of overall health
-                        st.markdown(f"### Overall Balance: {zone_results['health_summary']['overall_health'].capitalize()}")
+                        # Create a nice container for overall balance
+                        with st.container():
+                            st.markdown("""
+                            <div style="padding: 10px; border-radius: 10px; border: 1px solid #f0f2f6; margin-bottom: 20px;">
+                                <h3 style="color: #1E88E5; text-align: center;">Overall Balance</h3>
+                                <h4 style="text-align: center; padding: 10px;">
+                                    {}
+                                </h4>
+                            </div>
+                            """.format(zone_results['health_summary']['overall_health'].capitalize()), unsafe_allow_html=True)
                         
                         # Create dosha balance visualization
                         if 'dosha_balance' in zone_results['health_summary']:
                             dosha_balance = zone_results['health_summary']['dosha_balance']
                             
-                            # Create dosha pie chart
-                            if dosha_balance:
-                                dosha_labels = [f"{k.capitalize()} ({v:.0%})" for k, v in dosha_balance.items()]
-                                dosha_values = list(dosha_balance.values())
-                                
-                                fig, ax = plt.subplots()
-                                ax.pie(dosha_values, labels=dosha_labels, autopct='%1.1f%%', 
-                                       startangle=90, colors=['#a29bfe', '#ff7675', '#55efc4'])
-                                ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
-                                ax.set_title('Dosha Distribution in Iris')
-                                
-                                st.pyplot(fig)
-                                
-                            # Dosha interpretation
-                            st.markdown("### Dosha Interpretation")
+                            # Create a two-column layout for visualization and interpretation
+                            col1, col2 = st.columns([1, 1])
                             
-                            primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0] if dosha_balance else "unknown"
+                            with col1:
+                                # Create dosha pie chart in a container
+                                with st.container():
+                                    st.markdown("""
+                                    <div style="padding: 10px; border-radius: 10px; border: 1px solid #f0f2f6;">
+                                        <h3 style="color: #1E88E5; text-align: center;">Dosha Distribution</h3>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    
+                                    if dosha_balance:
+                                        dosha_labels = [f"{k.capitalize()} ({v:.0%})" for k, v in dosha_balance.items()]
+                                        dosha_values = list(dosha_balance.values())
+                                        
+                                        fig, ax = plt.subplots(figsize=(5, 5))
+                                        wedges, texts, autotexts = ax.pie(
+                                            dosha_values, 
+                                            labels=dosha_labels, 
+                                            autopct='%1.1f%%', 
+                                            startangle=90, 
+                                            colors=['#a29bfe', '#ff7675', '#55efc4'],
+                                            textprops={'fontsize': 12, 'weight': 'bold'}
+                                        )
+                                        
+                                        # Make the percentage numbers larger and bold
+                                        for text in autotexts:
+                                            text.set_fontsize(12)
+                                            text.set_weight('bold')
+                                            
+                                        ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                                        plt.tight_layout()
+                                        
+                                        st.pyplot(fig)
+                                        
+                                        # Add a color legend
+                                        st.markdown("""
+                                        <div style="display: flex; justify-content: center; text-align: center; margin-top: 10px;">
+                                          <div style="margin: 0 10px;"><span style="background-color: #a29bfe; padding: 2px 8px; border-radius: 3px;">⬤</span> Vata</div>
+                                          <div style="margin: 0 10px;"><span style="background-color: #ff7675; padding: 2px 8px; border-radius: 3px;">⬤</span> Pitta</div>
+                                          <div style="margin: 0 10px;"><span style="background-color: #55efc4; padding: 2px 8px; border-radius: 3px;">⬤</span> Kapha</div>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                            
+                            with col2:
+                                # Dosha interpretation heading with styling
+                                st.markdown("""
+                                <div style="padding: 10px; border-radius: 10px; border: 1px solid #f0f2f6;">
+                                    <h3 style="color: #1E88E5; text-align: center;">Dosha Interpretation</h3>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                                primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0] if dosha_balance else "unknown"
+                            
+                            # Use a styled container for the dosha interpretation
+                            dosha_colors = {
+                                "vata": "#a29bfe",
+                                "pitta": "#ff7675",
+                                "kapha": "#55efc4",
+                                "unknown": "#b2bec3"
+                            }
+                            
+                            # Get the color for the primary dosha
+                            dosha_color = dosha_colors.get(primary_dosha, "#b2bec3")
                             
                             if primary_dosha == "vata":
-                                st.markdown("""
-                                **Vata Dominant Iris**
-                                
-                                The iris shows signs of Vata dominance, which relates to the air and ether elements.
-                                This often manifests as:
-                                - Heightened nervous system activity
-                                - Potential for dryness and variability in systems
-                                - Need for grounding and stability
-                                
-                                **Balancing Suggestions:**
-                                - Regular routines and rest patterns
-                                - Warm, nourishing, and grounding foods
-                                - Gentle oil massage (abhyanga) with sesame oil
-                                - Meditation and stress reduction practices
-                                """)
+                                st.markdown(f"""
+                                <div style="background-color: rgba(162, 155, 254, 0.1); border-left: 5px solid {dosha_color}; 
+                                     padding: 15px; border-radius: 5px; margin-top: 10px;">
+                                    <h4 style="color: {dosha_color};">Vata Dominant Iris</h4>
+                                    
+                                    <p>The iris shows signs of <strong>Vata dominance</strong>, which relates to the air and ether elements.</p>
+                                    
+                                    <p><strong>This often manifests as:</strong></p>
+                                    <ul>
+                                        <li>Heightened nervous system activity</li>
+                                        <li>Potential for dryness and variability in systems</li>
+                                        <li>Need for grounding and stability</li>
+                                    </ul>
+                                    
+                                    <p><strong>Balancing Suggestions:</strong></p>
+                                    <ul>
+                                        <li>Regular routines and rest patterns</li>
+                                        <li>Warm, nourishing, and grounding foods</li>
+                                        <li>Gentle oil massage (abhyanga) with sesame oil</li>
+                                        <li>Meditation and stress reduction practices</li>
+                                    </ul>
+                                </div>
+                                """, unsafe_allow_html=True)
                             elif primary_dosha == "pitta":
-                                st.markdown("""
-                                **Pitta Dominant Iris**
-                                
-                                The iris shows signs of Pitta dominance, which relates to the fire and water elements.
-                                This often manifests as:
-                                - Strong digestive and metabolic functions
-                                - Tendency toward heat and inflammation
-                                - Potential for intensity and sharpness in bodily processes
-                                
-                                **Balancing Suggestions:**
-                                - Cooling foods and herbs
-                                - Avoiding excessive heat, sun exposure, and spicy foods
-                                - Regular exercise that's not too intense
-                                - Calming and cooling practices like moonlight walks
-                                """)
+                                st.markdown(f"""
+                                <div style="background-color: rgba(255, 118, 117, 0.1); border-left: 5px solid {dosha_color}; 
+                                     padding: 15px; border-radius: 5px; margin-top: 10px;">
+                                    <h4 style="color: {dosha_color};">Pitta Dominant Iris</h4>
+                                    
+                                    <p>The iris shows signs of <strong>Pitta dominance</strong>, which relates to the fire and water elements.</p>
+                                    
+                                    <p><strong>This often manifests as:</strong></p>
+                                    <ul>
+                                        <li>Strong digestive and metabolic functions</li>
+                                        <li>Tendency toward heat and inflammation</li>
+                                        <li>Potential for intensity and sharpness in bodily processes</li>
+                                    </ul>
+                                    
+                                    <p><strong>Balancing Suggestions:</strong></p>
+                                    <ul>
+                                        <li>Cooling foods and herbs</li>
+                                        <li>Avoiding excessive heat, sun exposure, and spicy foods</li>
+                                        <li>Regular exercise that's not too intense</li>
+                                        <li>Calming and cooling practices like moonlight walks</li>
+                                    </ul>
+                                </div>
+                                """, unsafe_allow_html=True)
                             elif primary_dosha == "kapha":
-                                st.markdown("""
-                                **Kapha Dominant Iris**
+                                st.markdown(f"""
+                                <div style="background-color: rgba(85, 239, 196, 0.1); border-left: 5px solid {dosha_color}; 
+                                     padding: 15px; border-radius: 5px; margin-top: 10px;">
+                                    <h4 style="color: {dosha_color};">Kapha Dominant Iris</h4>
+                                    
+                                    <p>The iris shows signs of <strong>Kapha dominance</strong>, which relates to the earth and water elements.</p>
+                                    
+                                    <p><strong>This often manifests as:</strong></p>
+                                    <ul>
+                                        <li>Stable energy and strong immunity</li>
+                                        <li>Potential for congestion or sluggishness</li>
+                                        <li>Well-developed structural elements in the body</li>
+                                    </ul>
+                                    
+                                    <p><strong>Balancing Suggestions:</strong></p>
+                                    <ul>
+                                        <li>Regular stimulating exercise</li>
+                                        <li>Warm, light, and spiced foods</li>
+                                        <li>Dry brushing and invigorating practices</li>
+                                        <li>Varied routines to prevent stagnation</li>
+                                    </ul>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            # Add a section for secondary and tertiary doshas
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if len(dosha_balance) > 1:
+                                sorted_doshas = sorted(dosha_balance.items(), key=lambda x: x[1], reverse=True)
                                 
-                                The iris shows signs of Kapha dominance, which relates to the earth and water elements.
-                                This often manifests as:
-                                - Stable energy and strong immunity
-                                - Potential for congestion or sluggishness
-                                - Well-developed structural elements in the body
-                                
-                                **Balancing Suggestions:**
-                                - Regular stimulating exercise
-                                - Warm, light, and spiced foods
-                                - Dry brushing and invigorating practices
-                                - Varied routines to prevent stagnation
-                                """)
+                                # Only display if there's at least one secondary dosha
+                                if len(sorted_doshas) > 1 and sorted_doshas[1][1] > 0.15:  # Only show if secondary dosha is at least 15%
+                                    secondary_dosha = sorted_doshas[1][0]
+                                    secondary_color = dosha_colors.get(secondary_dosha, "#b2bec3")
+                                    
+                                    st.markdown(f"""
+                                    <div style="background-color: rgba(240, 240, 240, 0.3); border: 1px solid #ddd; 
+                                         padding: 15px; border-radius: 5px; margin-top: 10px;">
+                                        <h4 style="color: {secondary_color}; margin-top: 0;">Secondary Influence: {secondary_dosha.capitalize()} ({(sorted_doshas[1][1]*100):.1f}%)</h4>
+                                        <p>This secondary dosha influence suggests a {primary_dosha}-{secondary_dosha} dual influence in your constitution. 
+                                        Balance both doshas for optimal results.</p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    
+                                    # Add a dosha relationship chart
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    st.markdown("""
+                                    <div style="background-color: rgba(240, 240, 240, 0.3); border: 1px solid #ddd; 
+                                         padding: 15px; border-radius: 5px; margin-top: 10px;">
+                                        <h4 style="text-align: center; margin-top: 0;">Dosha Relationship</h4>
+                                        <p style="text-align: center;">The three doshas work together in your system, with one or two typically more dominant.</p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
                 
-                # Add user info form
-                with st.expander("Add Personal Information to Report", expanded=False):
-                    st.info("This information will be included in your report. All fields are optional.")
+                # Visual separator before the form section
+                st.markdown("<hr style='margin-top: 30px; margin-bottom: 20px; border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0));'>", unsafe_allow_html=True)
+                
+                # Add user info form with improved styling
+                with st.expander("📋 Add Personal Information to Report", expanded=False):
+                    st.markdown("""
+                    <div style="background-color: rgba(240, 240, 240, 0.3); border: 1px solid #ddd; 
+                         padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                        <p style="color: #1E88E5; margin: 0;">
+                            This information will be included in your report. All fields are optional.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
                     user_info = {}
                     col1, col2 = st.columns(2)
                     with col1:
@@ -720,28 +854,58 @@ with tabs[3]:
                 
                 # Generate and offer reports for download
                 try:
+                    # Add a nice heading for reports section
+                    st.markdown("""
+                    <div style="padding: 10px; border-radius: 10px; border: 1px solid #f0f2f6; margin-top: 20px; margin-bottom: 20px;">
+                        <h3 style="color: #1E88E5; text-align: center;">Download Analysis Reports</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create columns for download buttons
+                    dl_col1, dl_col2 = st.columns(2)
+                    
                     # First, always generate the HTML report
                     html_report = st.session_state.iris_report_generator.generate_html_report(zone_results, user_info)
-                    st.download_button(
-                        label="Download HTML Report (for viewing online)",
-                        data=html_report,
-                        file_name=f"iris_zone_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
-                        mime="text/html",
-                        key="html_report_button"
-                    )
+                    
+                    with dl_col1:
+                        st.markdown("""
+                        <div style="background-color: rgba(30, 136, 229, 0.1); border-radius: 5px; padding: 10px; text-align: center; margin-bottom: 10px;">
+                            <h4 style="margin-top: 0;">HTML Report</h4>
+                            <p>Interactive report for viewing in web browsers</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.download_button(
+                            label="📄 Download HTML Report",
+                            data=html_report,
+                            file_name=f"iris_zone_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                            mime="text/html",
+                            key="html_report_button",
+                            use_container_width=True
+                        )
                     
                     # Try to generate PDF report if available
                     pdf_report = st.session_state.iris_report_generator.generate_report(zone_results, user_info)
-                    if pdf_report is not None:
-                        st.download_button(
-                            label="Download Iris Zone Analysis PDF Report",
-                            data=pdf_report,
-                            file_name=f"iris_zone_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                            mime="application/pdf",
-                            key="pdf_report_button"
-                        )
-                    else:
-                        st.warning("PDF generation is not available. To enable PDF reports, install the 'fpdf' package using: pip install fpdf")
+                    
+                    with dl_col2:
+                        st.markdown("""
+                        <div style="background-color: rgba(30, 136, 229, 0.1); border-radius: 5px; padding: 10px; text-align: center; margin-bottom: 10px;">
+                            <h4 style="margin-top: 0;">PDF Report</h4>
+                            <p>Printable document with analysis details</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        if pdf_report is not None:
+                            st.download_button(
+                                label="📑 Download PDF Report",
+                                data=pdf_report,
+                                file_name=f"iris_zone_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                mime="application/pdf",
+                                key="pdf_report_button",
+                                use_container_width=True
+                            )
+                        else:
+                            st.warning("PDF generation is not available. To enable PDF reports, install the 'fpdf' package.")
                 except Exception as e:
                     st.error(f"Error generating report: {str(e)}")
                 

@@ -11,7 +11,7 @@ from iris_predictor import IrisPredictor
 
 # Page title and configuration
 st.set_page_config(
-    page_title="irsveda - Iridology Knowledge Base",
+    page_title="IridoVeda",
     page_icon="👁️",
     layout="wide"
 )
@@ -24,6 +24,8 @@ st.sidebar.info(
     "This application extracts iris-related information from Ayurvedic/Iridology "
     "books and allows you to query the knowledge base."
 )
+st.sidebar.markdown("---")
+st.sidebar.markdown("Powered by [Dinexora](https://www.dinexora.de)")
 
 # Initialize session state
 if "qdrant_client" not in st.session_state:
@@ -47,7 +49,7 @@ if "is_initialized" not in st.session_state:
     st.session_state.is_initialized = False
 
 # Main page content
-st.title("Ayurvedic Iridology Knowledge Base")
+st.title("IridoVeda")
 
 # Tab layout
 tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "📊 Statistics"])
