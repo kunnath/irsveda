@@ -16,8 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies with specific versions to avoid compatibility issues
 COPY requirements.txt .
+
+# Install numpy first with a specific version
+RUN pip install --no-cache-dir numpy==1.24.3
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir fpdf>=1.7.2
 
@@ -35,9 +38,10 @@ RUN apt-get update && apt-get install -y curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install additional dependencies and models
-RUN pip install scikit-learn && \
-    python -m spacy download en_core_web_sm && \
+# Install additional dependencies and models with proper versioning
+RUN pip install --no-cache-dir scikit-learn==1.2.2 && \
+    pip install --no-cache-dir spacy==3.5.3 --no-build-isolation && \
+    python -m pip install --no-cache-dir --no-deps https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0-py3-none-any.whl && \
     python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
 
 # Expose port for Streamlit
