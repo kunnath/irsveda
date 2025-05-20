@@ -16,6 +16,8 @@ from enhanced_iris_qdrant import EnhancedIrisQdrantClient
 from context_aware_answers import ContextAwareAnswerGenerator
 from check_qdrant_status import verify_qdrant_collections, create_enhanced_chunk_from_standard
 from advanced_iris_analyzer import AdvancedIrisAnalyzer
+from iris_dataset_matcher import DatasetPatternMatcher
+from suggested_queries import SuggestedQueriesGenerator
 
 # Keep the original imports for backward compatibility
 from pdf_extractor import extract_iris_chunks
@@ -122,6 +124,41 @@ def show_generated_answer(answer_data):
         with st.expander("Sources"):
             for src in answer_data["sources"]:
                 st.markdown(f"- {src['title']}, Page {src['page']}")
+
+def handle_suggested_query(query, query_mode, result_count, min_relevance):
+    """
+    Handle user clicking on a suggested query button.
+    
+    Args:
+        query: The suggested query text
+        query_mode: The current search mode
+        result_count: Number of results to show
+        min_relevance: Minimum relevance threshold
+    """
+    try:
+        st.session_state.last_query = query
+        st.subheader(f"Results for: '{query}'")
+        
+        # Choose search method based on mode
+        if query_mode == "Standard Search":
+            results = st.session_state.qdrant_client.search(query, limit=result_count)
+            show_results(results, standard=True)
+        elif query_mode == "Enhanced Search":
+            results = st.session_state.enhanced_qdrant_client.hybrid_search(query, 
+                                                                          limit=result_count, 
+                                                                          min_score=min_relevance)
+            show_enhanced_results(results)
+        elif query_mode == "Multi-Query Search":
+            results = st.session_state.enhanced_qdrant_client.multi_query_search(query, limit=result_count)
+            show_enhanced_results(results)
+            
+            # Generate context-aware answer
+            answer_data = st.session_state.answer_generator.generate_answer(query, results)
+            show_generated_answer(answer_data)
+            
+    except Exception as e:
+        st.error(f"Error processing suggested query: {str(e)}")
+
 def check_qdrant_status():
     """Check Qdrant connection and initialize collection status."""
     try:
@@ -219,6 +256,9 @@ if "advanced_iris_analyzer" not in st.session_state:
         qdrant_port=qdrant_port,
         collection_name="iris_patterns"
     )
+
+if "query_generator" not in st.session_state:
+    st.session_state.query_generator = SuggestedQueriesGenerator()
 
 if "extracted_chunks" not in st.session_state:
     st.session_state.extracted_chunks = []
@@ -434,12 +474,45 @@ with tabs[1]:
     if not is_ready:
         st.warning(f"⚠️ {query_mode} knowledge base is empty. Please upload and process PDFs first.")
     else:
+        # Track if a suggested query was clicked
+        if "suggested_query_clicked" not in st.session_state:
+            st.session_state.suggested_query_clicked = False
+            st.session_state.last_query = ""
+            
+        # Get suggested queries
+        suggested_queries = st.session_state.query_generator.get_suggested_queries(5)
+        
+        # Create a container for suggested queries
+        st.markdown("### Suggested Queries")
+        st.markdown("Click on any query to see instant results:")
+        
+        # Display suggested queries as clickable buttons
+        cols = st.columns(2)
+        for i, suggested_query in enumerate(suggested_queries):
+            col_index = i % 2
+            with cols[col_index]:
+                if st.button(suggested_query, key=f"suggested_query_{i}", use_container_width=True):
+                    handle_suggested_query(suggested_query, query_mode, result_count, min_relevance)
+                    st.session_state.suggested_query_clicked = True
+                    st.session_state.last_query = suggested_query
+        
+        st.markdown("---")
+        st.markdown("### Custom Query")
+        
+        # Get the value to display in the text input
+        input_value = st.session_state.last_query if st.session_state.suggested_query_clicked else ""
+        
         query = st.text_input(
             "Ask a question about iridology:",
+            value=input_value,
             placeholder="How does the iris pattern reflect liver conditions in iridology?"
         )
         
-        if query:
+        # Reset the clicked state if the user changes the query
+        if query != st.session_state.last_query:
+            st.session_state.suggested_query_clicked = False
+        
+        if query and not st.session_state.suggested_query_clicked:
             with st.spinner("Searching knowledge base..."):
                 try:
                     # Choose search method based on mode
@@ -512,23 +585,30 @@ with tabs[2]:
                         
                         st.markdown(f"**Overall Health:** {results['analysis']['overall_health'].capitalize()}")
                     
-                    # Generate and display queries
+                    # Generate and display suggested queries based on iris features
                     st.subheader("Suggested Queries")
                     
+                    # Generate iris-specific queries using our new module
+                    if "features" in results:
+                        iris_queries = st.session_state.query_generator.generate_query_from_iris_features(results["features"])
+                    else:
+                        iris_queries = st.session_state.query_generator.get_suggested_queries(5)
+                    
                     query_cols = st.columns(2)
-                    for i, query in enumerate(results["queries"]):
+                    for i, query in enumerate(iris_queries):
                         col_idx = i % 2
                         with query_cols[col_idx]:
                             if st.button(f"🔍 {query}", key=f"query_{i}"):
-                                # Set the query in the query tab
+                                # Instead of just setting the query and switching tabs,
+                                # we'll now directly handle the query and show results
                                 st.session_state.current_query = query
-                                # Modern way to switch tabs with rerun
-                                st.query_params["tab"] = "query"
-                                st.rerun()
+                                st.session_state.selected_iris_query = query
+                                
+                    st.markdown("---")
                     
                     # Run selected query if set
-                    if hasattr(st.session_state, "current_query"):
-                        query = st.session_state.current_query
+                    if "selected_iris_query" in st.session_state:
+                        query = st.session_state.selected_iris_query
                         
                         # Check which knowledge base to use
                         if st.session_state.is_enhanced_initialized:
@@ -1085,7 +1165,7 @@ with tabs[4]:
                     st.error(analysis_results["error"])
                 else:
                     # Create tabs for different analysis views
-                    advanced_tabs = st.tabs(["Overview", "Color Analysis", "Spot Detection", "Texture Analysis", "Pattern Matching", "Health Insights"])
+                    advanced_tabs = st.tabs(["Overview", "Color Analysis", "Spot Detection", "Texture Analysis", "Pattern Matching", "Health Insights", "Health Queries"])
                     
                     # Overview tab
                     with advanced_tabs[0]:
@@ -1353,37 +1433,198 @@ with tabs[4]:
                     with advanced_tabs[4]:
                         st.subheader("Iris Pattern Matching")
                         
-                        # Get similar patterns
-                        similar_patterns = analysis_results.get("similar_patterns", [])
+                        # Create tabs for user patterns and research datasets
+                        pattern_tabs = st.tabs(["User Patterns", "Research Datasets"])
+                        
+                        # User Patterns Tab - Show patterns from previous user uploads
+                        with pattern_tabs[0]:
+                            # Get similar patterns
+                            similar_patterns = analysis_results.get("similar_patterns", [])
+                            
+                            if similar_patterns:
+                                st.markdown(f"Found {len(similar_patterns)} similar iris patterns in the user database")
+                                
+                                # Display similar patterns
+                                for i, pattern in enumerate(similar_patterns):
+                                    similarity = pattern.get("similarity", 0)
+                                    metadata = pattern.get("metadata", {})
+                                    
+                                    with st.expander(f"Similar Pattern #{i+1} - Similarity: {similarity:.2f}", expanded=i==0):
+                                        # Display metadata
+                                        st.markdown(f"**Timestamp:** {metadata.get('timestamp', 'Unknown')}")
+                                        st.markdown(f"**Source:** {metadata.get('filename', 'Unknown')}")
+                            else:
+                                st.info("No similar patterns found in user database. Upload more iris images to build your pattern database.")
+                        
+                        # Research Datasets Tab - Show patterns from research datasets
+                        with pattern_tabs[1]:
+                            st.markdown("### Research Dataset Matches")
+                            
+                            # Select dataset
+                            dataset_options = {
+                                "casia_thousand": "CASIA-Iris-Thousand (1,000 subjects, 20,000 images)",
+                                "nd_iris_0405": "ND-IRIS-0405 (356 subjects, 64,980 images)",
+                                "ubiris_v2": "UBIRIS.v2 (261 subjects, non-ideal conditions)"
+                            }
+                            
+                            selected_dataset = st.selectbox(
+                                "Select research dataset for comparison",
+                                options=list(dataset_options.keys()),
+                                format_func=lambda x: dataset_options[x]
+                            )
+                            
+                            # Initialize dataset matcher
+                            if st.button("Find Matches in Research Dataset"):
+                                with st.spinner(f"Comparing with {dataset_options[selected_dataset]}..."):
+                                    try:
+                                        # Get the path of the uploaded image
+                                        if not 'temp_advanced_path' in locals() and not 'temp_advanced_path' in globals():
+                                            st.error("Error: No image has been uploaded for analysis.")
+                                            st.info("Please upload an iris image before matching with research datasets.")
+                                            raise Exception("No image uploaded")
+                                            
+                                        tmp_img_path = temp_advanced_path
+                                        
+                                        # Verify that the file exists and is accessible
+                                        if not os.path.exists(tmp_img_path):
+                                            st.error("Error: The uploaded iris image is not accessible.")
+                                            st.info("Please try uploading the image again.")
+                                            raise Exception("Image not accessible")
+                                            
+                                        # Check if dataset exists
+                                        dataset_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                                                  "datasets", selected_dataset)
+                                        metadata_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                                                   "datasets", "dataset_metadata.csv")
+                                        
+                                        if not os.path.exists(dataset_path) or not os.listdir(dataset_path) or not os.path.exists(metadata_path):
+                                            st.warning(f"""
+                                            Dataset {dataset_options[selected_dataset]} is not set up yet.
+                                            
+                                            To use this feature:
+                                            1. Obtain the dataset from the official source
+                                            2. Run the setup script: `python dataset_downloader.py --dataset {selected_dataset}`
+                                            
+                                            For testing, you can create a simulated dataset:
+                                            `python dataset_downloader.py --simulate --dataset {selected_dataset} --samples 20`
+                                            """)
+                                        else:
+                                            # Try to match with dataset
+                                            try:
+                                                dataset_matcher = DatasetPatternMatcher(dataset_key=selected_dataset)
+                                                dataset_matches = dataset_matcher.match_iris_with_dataset(tmp_img_path)
+                                                
+                                                if "error" in dataset_matches:
+                                                    st.error(f"Error matching with dataset: {dataset_matches['error']}")
+                                                
+                                                # Suggest dataset setup if it's missing
+                                                if "not found" in str(dataset_matches['error']) or "empty" in str(dataset_matches['error']):
+                                                    st.info("""
+                                                    ### Dataset Setup Instructions
+                                                    
+                                                    To use research datasets for iris pattern matching:
+                                                    
+                                                    1. Run the dataset downloader with the simulate option for testing:
+                                                       ```
+                                                       python dataset_downloader.py --simulate --dataset casia_thousand --samples 20
+                                                       ```
+                                                       
+                                                    2. For actual research datasets, follow the setup instructions in ENHANCED_README.md
+                                                    """)
+                                            except Exception as e:
+                                                st.error(f"Error accessing dataset: {str(e)}")
+                                                
+                                                # Display helpful setup instructions
+                                                st.info("""
+                                                ### Dataset Setup Required
+                                                
+                                                The research dataset functionality requires additional setup:
+                                                
+                                                1. Make sure the Qdrant server is running (check docker-compose up -d)
+                                                2. Run the dataset simulation script for testing:
+                                                   ```
+                                                   python dataset_downloader.py --simulate --dataset casia_thousand
+                                                   ```
+                                                """)
+                                            else:
+                                                # Get statistics about the dataset
+                                                stats = dataset_matcher.get_dataset_statistics()
+                                                
+                                                # Display stats
+                                                if "error" not in stats:
+                                                    st.markdown(f"**Dataset:** {stats['dataset_name']}")
+                                                    st.markdown(f"**Total subjects:** {stats['subjects']}")
+                                                    st.markdown(f"**Total patterns:** {stats['total_patterns']}")
+                                                
+                                                # Display matches
+                                                matches = dataset_matches.get("matches", [])
+                                                if matches:
+                                                    st.success(f"Found {len(matches)} similar patterns in the research dataset")
+                                                    
+                                                    # Create columns for matches
+                                                    for i, match in enumerate(matches):
+                                                        score = match["score"]
+                                                        # Higher score means lower similarity in cosine distance
+                                                        similarity = max(0, 1.0 - score)
+                                                        
+                                                        with st.expander(f"Research Match #{i+1} - Similarity: {similarity:.2f}", expanded=i==0):
+                                                            cols = st.columns(2)
+                                                            with cols[0]:
+                                                                st.markdown(f"**Subject ID:** {match['subject_id']}")
+                                                                st.markdown(f"**Eye:** {match['eye']}")
+                                                                st.markdown(f"**Dataset:** {match['dataset']}")
+                                                            
+                                                            with cols[1]:
+                                                                # Extract features for display
+                                                                features = match.get('features', {})
+                                                                if features:
+                                                                    st.markdown("#### Feature Comparison")
+                                                                    if "main_color" in features and features["main_color"]:
+                                                                        color = features["main_color"]
+                                                                        st.markdown(f"**Main Color:** RGB({color[0]}, {color[1]}, {color[2]})")
+                                                                    
+                                                                    if "num_spots" in features:
+                                                                        st.markdown(f"**Spot Count:** {features['num_spots']}")
+                                                                        
+                                                                    if "contrast" in features:
+                                                                        st.markdown(f"**Contrast:** {features['contrast']:.2f}")
+                                                            
+                                                if not matches:
+                                                    st.warning("No matches found in the research dataset. This could be because the dataset is not yet set up or the pattern is unique.")
+                                    
+                                    except Exception as e:
+                                        st.error(f"Error during dataset matching: {str(e)}")
+                            
+                            # Show info about datasets
+                            st.markdown("### About Research Datasets")
+                            st.markdown("""
+                            The research datasets need to be separately downloaded and prepared due to their large size and licensing requirements.
+                            
+                            To set up the datasets for pattern matching:
+                            1. Obtain the dataset from the official source
+                            2. Run the dataset setup script: `python iris_dataset_matcher.py --setup --dataset [dataset_name]`
+                            3. Once set up, you can match patterns against the research dataset
+                            """)
+                            
+                            st.markdown("**Note:** First-time setup of research datasets may take several hours depending on the dataset size.")
                         
                         if similar_patterns:
-                            st.markdown(f"Found {len(similar_patterns)} similar iris patterns in the database")
-                            
-                            # Display similar patterns
+                            # Show feature comparison if available
                             for i, pattern in enumerate(similar_patterns):
-                                similarity = pattern.get("similarity", 0)
-                                metadata = pattern.get("metadata", {})
-                                
-                                with st.expander(f"Similar Pattern #{i+1} - Similarity: {similarity:.2f}", expanded=i==0):
-                                    # Display metadata
-                                    st.markdown(f"**Timestamp:** {metadata.get('timestamp', 'Unknown')}")
-                                    st.markdown(f"**Source:** {metadata.get('filename', 'Unknown')}")
+                                if "feature_comparison" in pattern:
+                                    feature_comp = pattern["feature_comparison"]
                                     
-                                    # Show feature comparison if available
-                                    if "feature_comparison" in pattern:
-                                        feature_comp = pattern["feature_comparison"]
-                                        
-                                        st.markdown("#### Feature Comparison")
-                                        
-                                        # Create a comparison table
-                                        data = []
-                                        for feature_name, values in feature_comp.items():
-                                            this_value = values.get("current", "N/A")
-                                            other_value = values.get("matched", "N/A")
-                                            data.append([feature_name, this_value, other_value])
-                                        
-                                        df = pd.DataFrame(data, columns=["Feature", "Current Iris", "Matched Iris"])
-                                        st.table(df)
+                                    st.markdown("#### Feature Comparison")
+                                    
+                                    # Create a comparison table
+                                    data = []
+                                    for feature_name, values in feature_comp.items():
+                                        this_value = values.get("current", "N/A")
+                                        other_value = values.get("matched", "N/A")
+                                        data.append([feature_name, this_value, other_value])
+                                    
+                                    df = pd.DataFrame(data, columns=["Feature", "Current Iris", "Matched Iris"])
+                                    st.table(df)
                         else:
                             st.info("No similar patterns found in the database. This might be the first iris with these characteristics.")
                             
@@ -1428,33 +1669,58 @@ with tabs[4]:
                                 if dosha_balance:
                                     st.markdown("#### Dosha Distribution")
                                     
-                                    # Prepare data for chart
-                                    dosha_labels = list(dosha_balance.keys())
-                                    dosha_values = list(dosha_balance.values())
+                                    # Create a two-column layout for a more compact presentation
+                                    cols = st.columns([2, 3])
                                     
-                                    # Set colors for doshas
-                                    dosha_colors = ['#a29bfe', '#ff7675', '#55efc4']
-                                    
-                                    # Create pie chart
-                                    fig, ax = plt.subplots(figsize=(6, 6))
-                                    wedges, texts, autotexts = ax.pie(
-                                        dosha_values, 
-                                        labels=[f"{d.capitalize()}" for d in dosha_labels], 
-                                        autopct='%1.1f%%', 
-                                        startangle=90, 
-                                        colors=dosha_colors,
-                                        textprops={'fontsize': 12, 'weight': 'bold'}
-                                    )
-                                    
-                                    # Style the chart
-                                    for text in autotexts:
-                                        text.set_fontsize(12)
-                                        text.set_weight('bold')
+                                    with cols[0]:
+                                        # Find primary dosha
+                                        primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0]
                                         
-                                    ax.axis('equal')
-                                    plt.tight_layout()
+                                        # Display primary dosha prominently 
+                                        st.markdown(f"""
+                                        <div style="border-radius: 5px; padding: 10px; text-align: center; 
+                                                 background-color: rgba(75, 75, 75, 0.1);">
+                                            <h4>Primary Dosha</h4>
+                                            <h3 style="color: {'#9b59b6' if primary_dosha == 'vata' else 
+                                                          '#e74c3c' if primary_dosha == 'pitta' else '#27ae60'};">
+                                                {primary_dosha.upper()}
+                                            </h3>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                        
+                                        # Display percentages in a simple list
+                                        st.markdown("##### Constitution")
+                                        for dosha, value in dosha_balance.items():
+                                            st.markdown(f"**{dosha.capitalize()}:** {value:.1%}")
                                     
-                                    st.pyplot(fig)
+                                    with cols[1]:
+                                        # Prepare data for chart
+                                        dosha_labels = list(dosha_balance.keys())
+                                        dosha_values = list(dosha_balance.values())
+                                        
+                                        # Set colors for doshas
+                                        dosha_colors = ['#a29bfe', '#ff7675', '#55efc4']
+                                        
+                                        # Create smaller pie chart
+                                        fig, ax = plt.subplots(figsize=(3.5, 3))
+                                        wedges, texts, autotexts = ax.pie(
+                                            dosha_values, 
+                                            labels=[f"{d.capitalize()}" for d in dosha_labels], 
+                                            autopct='%1.1f%%', 
+                                            startangle=90, 
+                                            colors=dosha_colors,
+                                            textprops={'fontsize': 9}
+                                        )
+                                        
+                                        # Style the chart - smaller font for better fit in reports
+                                        for text in autotexts:
+                                            text.set_fontsize(8)
+                                            
+                                        ax.axis('equal')
+                                        plt.tight_layout()
+                                        
+                                        # Display the smaller chart
+                                        st.pyplot(fig)
                                 
                                 # Display key findings
                                 key_findings = insights.get("key_findings", [])
@@ -1605,71 +1871,144 @@ with tabs[4]:
                 os.unlink(temp_advanced_path)
             except:
                 pass
-
-# Seventh tab - Configuration
-with tabs[6]:
-    st.header("Advanced Configuration")
-    
-    st.warning("⚠️ Changes to these settings may affect the performance of the knowledge base.")
-    
-    with st.form("config_form"):
-        st.subheader("Knowledge Base Configuration")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            collection_name = st.text_input("Collection Name", "iris_chunks", 
-                                          help="Name of the Qdrant collection")
-            vector_model = st.selectbox("Vector Model", 
-                                      ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "multi-qa-MiniLM-L6-cos-v1"],
-                                      help="Select the embedding model for vector search")
-        
-        with col2:
-            distance_metric = st.selectbox("Distance Metric", 
-                                         ["COSINE", "DOT", "EUCLIDEAN"],
-                                         help="Vector distance metric for similarity search")
-            page_step = st.number_input("OCR Page Step", min_value=1, max_value=10, value=5,
-                                       help="Process every N pages for OCR to balance speed and coverage")
-        
-        st.subheader("NLP Settings")
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            min_paragraph_length = st.number_input("Min Paragraph Length", 
-                                                 min_value=10, max_value=100, value=25,
-                                                 help="Minimum word count for paragraphs")
-            duplicate_threshold = st.slider("Duplicate Detection Threshold", 
-                                          min_value=0.3, max_value=0.9, value=0.7, step=0.05,
-                                          help="Similarity threshold for duplicate detection")
-        
-        with col4:
-            keyword_boost = st.slider("Keyword Boost", 
-                                    min_value=0.0, max_value=0.5, value=0.1, step=0.05,
-                                    help="Boost factor for keyword matches")
-            nlp_model = st.selectbox("NLP Model", 
-                                   ["en_core_web_sm", "en_core_web_md"],
-                                   help="spaCy model for NLP processing")
-        
-        # JSON configuration export/import
-        st.subheader("Configuration Import/Export")
-        
-        config_json = st.text_area("Configuration JSON", 
-                                  value=json.dumps({
-                                      "collection_name": collection_name,
-                                      "vector_model": vector_model,
-                                      "distance_metric": distance_metric,
-                                      "page_step": page_step,
-                                      "min_paragraph_length": min_paragraph_length,
-                                      "duplicate_threshold": duplicate_threshold,
-                                      "keyword_boost": keyword_boost,
-                                      "nlp_model": nlp_model
-                                  }, indent=2),
-                                  height=200)
-        
-        # Submit button
-        submitted = st.form_submit_button("Apply Configuration")
-        
-        if submitted:
-            st.success("✅ Configuration applied successfully!")
-            st.info("Note: Some changes may require restarting the application to take effect.")
+                
+            # Health Queries tab
+            with advanced_tabs[6]:
+                st.subheader("Personalized Health Queries")
+                
+                st.markdown("""
+                <div style="
+                    background-color: rgba(49, 51, 63, 0.1);
+                    padding: 15px;
+                    border-radius: 10px;
+                    margin-bottom: 20px;
+                ">
+                    <p>Based on your iris analysis, here are personalized questions to help you learn more about potential health implications. 
+                    Click on any question to get an informative response from our knowledge base.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Generate queries based on iris features
+                iris_queries = st.session_state.query_generator.generate_query_from_iris_features(analysis_results.get("features", {}))
+                
+                # Add container for query results
+                query_result_container = st.container()
+                
+                # Set default state for advanced query handling
+                if "advanced_query_clicked" not in st.session_state:
+                    st.session_state.advanced_query_clicked = False
+                    st.session_state.current_advanced_query = ""
+                
+                # Display queries in a nice layout with cards
+                for i, query in enumerate(iris_queries):
+                    card_color = "#f0f2f6"
+                    border_color = "#e0e2e6" 
+                    
+                    if st.session_state.current_advanced_query == query:
+                        card_color = "rgba(151, 187, 205, 0.2)"
+                        border_color = "#97bbcd"
+                        
+                    # Create a styled card for each query
+                    st.markdown(f"""
+                    <div style="
+                        background-color: {card_color};
+                        border: 1px solid {border_color};
+                        border-radius: 8px;
+                        padding: 10px 15px;
+                        margin-bottom: 10px;
+                        cursor: pointer;
+                    ">
+                        <p style="margin: 0; font-size: 16px;">🔍 {query}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create a button with the same query text (hidden visually but functional)
+                    if st.button(f"Query: {query}", key=f"adv_query_{i}", help="Click to answer this query"):
+                        st.session_state.advanced_query_clicked = True
+                        st.session_state.current_advanced_query = query
+                
+                # If a query is clicked, show the results
+                if st.session_state.advanced_query_clicked:
+                    query = st.session_state.current_advanced_query
+                    
+                    with query_result_container:
+                        st.markdown("---")
+                        st.subheader(f"Results for: '{query}'")
+                        
+                        with st.spinner("Searching for the best answer..."):
+                            try:
+                                # Use the best search method based on availability
+                                if st.session_state.is_enhanced_initialized:
+                                    # Use multi-query search for better results
+                                    results = st.session_state.enhanced_qdrant_client.multi_query_search(
+                                        query, 
+                                        limit=5
+                                    )
+                                    
+                                    # Generate a comprehensive answer
+                                    answer_data = st.session_state.answer_generator.generate_answer(
+                                        query, 
+                                        results
+                                    )
+                                    
+                                    # Display the answer first for better UX
+                                    if answer_data and answer_data["confidence"] > 0:
+                                        st.markdown("### Answer")
+                                        st.markdown(answer_data["answer"])
+                                        
+                                        # Show confidence with colored indicator
+                                        conf = answer_data["confidence"]
+                                        conf_color = get_score_color(conf)
+                                        st.markdown(f"""
+                                            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                                <span style="margin-right: 10px;">Confidence:</span>
+                                                <div style="background-color: #f0f2f6; flex-grow: 1; height: 10px; border-radius: 5px; overflow: hidden;">
+                                                    <div style="background-color: {conf_color}; width: {conf*100}%; height: 100%;"></div>
+                                                </div>
+                                                <span style="margin-left: 10px; font-weight: bold;">{conf:.2f}</span>
+                                            </div>
+                                        """, unsafe_allow_html=True)
+                                    
+                                        # Show sources
+                                        if answer_data.get("sources"):
+                                            with st.expander("View Sources"):
+                                                for src in answer_data["sources"]:
+                                                    st.markdown(f"- {src.get('title', 'Unknown source')}, Page: {src.get('page', 'N/A')}")
+                                    
+                                    # Show supporting results
+                                    with st.expander("View Search Results", expanded=not answer_data or answer_data["confidence"] < 0.7):
+                                        show_enhanced_results(results)
+                                elif st.session_state.is_initialized:
+                                    # Fallback to standard search
+                                    results = st.session_state.qdrant_client.search(query, limit=5)
+                                    show_results(results, standard=True)
+                                else:
+                                    st.warning("Knowledge base is not initialized. Please upload PDF documents first to enable querying.")
+                            except Exception as e:
+                                st.error(f"Error processing query: {str(e)}")
+                                st.info("Try another query or check if the knowledge base is properly initialized.")
+                else:
+                    with query_result_container:
+                        st.info("👆 Click on any question above to see the answer from our knowledge base.")
+                        
+                        # Show sample query topic buttons for exploration
+                        st.markdown("### Explore Topics")
+                        st.markdown("Or explore these general topics related to iridology:")
+                        
+                        # Create columns for topic buttons
+                        topic_cols = st.columns(3)
+                        
+                        topics = [
+                            "Iris Zones", "Constitutional Types", 
+                            "Digestive System", "Nervous System", 
+                            "Detoxification", "Ayurvedic Connection"
+                        ]
+                        
+                        for i, topic in enumerate(topics):
+                            with topic_cols[i % 3]:
+                                if st.button(topic, key=f"topic_{i}"):
+                                    # Generate a query about this topic
+                                    topic_query = f"What does iridology tell us about {topic.lower()}?"
+                                    st.session_state.advanced_query_clicked = True
+                                    st.session_state.current_advanced_query = topic_query
+                                    st.rerun()

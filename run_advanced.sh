@@ -10,18 +10,23 @@ export QDRANT_PORT=6333
 # Activate the virtual environment
 source venv/bin/activate
 
-# Check if Qdrant is running
-echo "🔍 Checking if Qdrant is running..."
-curl -s http://localhost:6333/healthz > /dev/null
-if [ $? -ne 0 ]; then
-    echo "⚠️ Qdrant is not running. Starting with Docker..."
-    docker run -d -p 6333:6333 -p 6334:6334 \
-        -v $(pwd)/qdrant_data:/qdrant/storage \
-        qdrant/qdrant
-    echo "⏳ Waiting for Qdrant to start..."
-    sleep 5  # Give Qdrant time to start
-fi
+# Start services using Docker Compose
+echo "🔍 Starting services with Docker Compose..."
+docker-compose up -d
+
+# Check if services are running
+echo "⏳ Waiting for services to be ready..."
+sleep 5  # Give services time to start
 
 # Run the application
-echo "👁️ Starting IridoVeda application..."
-streamlit run advanced_app.py -- --server.port=8501 --server.address=0.0.0.0
+if [ "$1" == "local" ]; then
+    # Run application locally (outside Docker)
+    echo "👁️ Starting IridoVeda application locally..."
+    streamlit run advanced_app.py -- --server.port=8501 --server.address=0.0.0.0
+else
+    # Application is already running in Docker
+    echo "👁️ IridoVeda application is running in Docker container"
+    echo "📊 Access the application at http://localhost:8501"
+    echo "💡 Use Ctrl+C to stop watching logs"
+    docker-compose logs -f app
+fi

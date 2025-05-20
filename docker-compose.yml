@@ -7,7 +7,8 @@ services:
       - .:/app
       - ./uploads:/app/uploads
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
@@ -21,8 +22,9 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
+    # Using bash to test HTTP connection since curl/wget aren't available
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/localhost/6333; echo -e 'GET /livez HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200 OK'"]
       interval: 30s
       timeout: 10s
       retries: 3

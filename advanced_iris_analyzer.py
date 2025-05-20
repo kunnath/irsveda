@@ -21,6 +21,13 @@ from iris_feature_extractor import extract_all_features
 from iris_pattern_matcher import IrisPatternMatcher
 from iris_zone_analyzer import IrisZoneAnalyzer  # Import the existing zone analyzer
 
+# Try to import the suggested queries generator (optional)
+try:
+    from suggested_queries import SuggestedQueriesGenerator
+    QUERIES_GENERATOR_AVAILABLE = True
+except ImportError:
+    QUERIES_GENERATOR_AVAILABLE = False
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,6 +59,11 @@ class AdvancedIrisAnalyzer:
         
         # Initialize the existing zone analyzer for compatibility
         self.zone_analyzer = IrisZoneAnalyzer()
+        
+        # Initialize the query generator if available
+        self.query_generator = None
+        if QUERIES_GENERATOR_AVAILABLE:
+            self.query_generator = SuggestedQueriesGenerator()
         
         # Ensure the collection exists
         self.pattern_matcher.create_collection()
@@ -126,7 +138,12 @@ class AdvancedIrisAnalyzer:
             # Step 6: Also run the existing zone analyzer for compatibility
             zone_results = self.zone_analyzer.process_iris_image(image_path)
             
-            # Step 7: Create a combined result
+            # Step 7: Generate suggested health queries (if query generator is available)
+            suggested_queries = []
+            if self.query_generator is not None:
+                suggested_queries = self.query_generator.generate_query_from_iris_features(features)
+            
+            # Step 8: Create a combined result
             analysis_result = {
                 "timestamp": datetime.now().isoformat(),
                 "processing_time": time.time() - start_time,
@@ -148,6 +165,7 @@ class AdvancedIrisAnalyzer:
                     "texture_stats": features.get("texture_features", {})
                 },
                 "similar_patterns": similar_patterns,
+                "suggested_queries": suggested_queries,
                 "image_paths": {
                     "segmentation": self._save_visualization(segmentation_data["segmentation_image"], "segmentation"),
                     "zones": self._save_visualization(zone_data["zone_visualization"], "zones") if zone_data else None
@@ -179,6 +197,10 @@ class AdvancedIrisAnalyzer:
             
             if pattern_id:
                 analysis_result["pattern_id"] = pattern_id
+            
+            # Generate suggested queries if the generator is available
+            if self.query_generator and "suggested_queries" not in analysis_result:
+                analysis_result["suggested_queries"] = self.query_generator.generate_query_from_iris_features(analysis_result.get("features", {}))
             
             return analysis_result
             

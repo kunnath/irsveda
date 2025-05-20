@@ -47,6 +47,5 @@ RUN pip install --no-cache-dir scikit-learn==1.2.2 && \
 # Expose port for Streamlit
 EXPOSE 8501
 
-# Run the application - can be switched between app.py and advanced_app.py
-#CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run the application - using the advanced_app.py with optimized features
 CMD ["streamlit", "run", "advanced_app.py", "--server.port=8501", "--server.address=0.0.0.0"]

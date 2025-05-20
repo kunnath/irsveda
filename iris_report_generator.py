@@ -90,11 +90,27 @@ class IrisReportGenerator:
         dosha_labels = [f"{k.capitalize()}" for k in dosha_balance.keys()]
         dosha_values = list(dosha_balance.values())
         
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.pie(dosha_values, labels=dosha_labels, autopct='%1.1f%%', 
-               startangle=90, colors=['#a29bfe', '#ff7675', '#55efc4'])
+        # Create a smaller pie chart for reports
+        fig, ax = plt.subplots(figsize=(3.5, 3))
+        wedges, texts, autotexts = ax.pie(
+            dosha_values, 
+            labels=dosha_labels, 
+            autopct='%1.1f%%', 
+            startangle=90, 
+            colors=['#a29bfe', '#ff7675', '#55efc4'],
+            textprops={'fontsize': 9}
+        )
+        
+        # Style the chart - smaller font for better fit in reports
+        for text in autotexts:
+            text.set_fontsize(8)
+            
         ax.axis('equal')
-        ax.set_title('Dosha Distribution in Iris')
+        
+        # Add a more compact title
+        ax.set_title('Dosha Distribution', fontsize=10, pad=5)
+        
+        plt.tight_layout(pad=0.5)
         
         return self._fig_to_img(fig)
     
@@ -203,9 +219,23 @@ class IrisReportGenerator:
         
         # Add dosha balance chart
         if 'dosha_balance' in zone_results['health_summary'] and zone_results['health_summary']['dosha_balance']:
-            dosha_chart = self._create_dosha_chart(zone_results['health_summary']['dosha_balance'])
+            # Find the primary dosha
+            dosha_balance = zone_results['health_summary']['dosha_balance']
+            primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0]
+            
+            # Add primary dosha text
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 10, f'Primary Dosha: {primary_dosha.upper()}', 0, 1, 'L')
+            pdf.set_font('Arial', '', 10)
+            
+            # Add dosha percentages
+            for dosha, value in dosha_balance.items():
+                pdf.cell(0, 6, f"{dosha.capitalize()}: {value:.1%}", 0, 1, 'L')
+            
+            # Add the dosha chart
+            dosha_chart = self._create_dosha_chart(dosha_balance)
             if dosha_chart:
-                pdf.image(dosha_chart, x=self.margin + 25, w=self.width / 2)
+                pdf.image(dosha_chart, x=self.margin + 35, w=self.width / 3)
                 pdf.ln(5)
         
         # Add zone distribution chart
