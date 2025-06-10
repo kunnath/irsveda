@@ -5,6 +5,8 @@ from pathlib import Path
 import tempfile
 from typing import Dict, List, Any, Tuple, Optional
 
+# Import dosha quantification model
+from dosha_quantification_model import DoshaQuantificationModel
 
 class IrisPredictor:
     """Class for analyzing iris images and generating predictions/queries."""
@@ -12,7 +14,8 @@ class IrisPredictor:
     def __init__(self):
         """Initialize the iris predictor."""
         # In a real implementation, you would load models here
-        pass
+        # Initialize the dosha quantification model
+        self.dosha_model = DoshaQuantificationModel()
     
     def preprocess_image(self, image_path: str) -> np.ndarray:
         """
@@ -255,9 +258,31 @@ class IrisPredictor:
         # Generate queries
         queries = self.generate_queries(analysis)
         
+        # Add dosha quantification analysis
+        dosha_analysis = self.analyze_dosha_profile(image_path)
+        
         return {
             "analysis": analysis,
             "metadata": iris_metadata,
             "queries": queries,
-            "image": iris_img
+            "image": iris_img,
+            "dosha_analysis": dosha_analysis
         }
+    
+    def analyze_dosha_profile(self, image_path: str) -> Dict[str, Any]:
+        """
+        Analyze iris image to generate dosha profile and health indicators.
+        
+        Args:
+            image_path: Path to the iris image
+            
+        Returns:
+            Dictionary containing dosha analysis results
+        """
+        try:
+            # Process the iris image using the dosha quantification model
+            dosha_report = self.dosha_model.process_iris_image(image_path)
+            return dosha_report
+        except Exception as e:
+            print(f"Error in dosha analysis: {str(e)}")
+            return {"error": f"Dosha analysis failed: {str(e)}"}

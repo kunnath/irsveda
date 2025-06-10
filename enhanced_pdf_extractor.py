@@ -64,6 +64,25 @@ HEALTH_KEYWORDS = {
     'chronic', 'acute', 'constitutional', 'inherent'
 }
 
+# Keywords specific to Ayurvedic doshas for better content categorization
+DOSHA_KEYWORDS = {
+    "vata": [
+        "vata", "air", "ether", "dry", "light", "cold", "rough", "irregular", "movement", 
+        "creative", "anxiety", "nervous", "variable energy", "spacey", "ungrounded",
+        "thin frame", "insomnia", "blue iris", "light iris", "erratic", "variable"
+    ],
+    "pitta": [
+        "pitta", "fire", "water", "hot", "sharp", "intense", "penetrating", "acidic", 
+        "inflammation", "metabolic", "reddish", "anger", "impatience", "structured", 
+        "efficient", "medium build", "focused", "amber iris", "reddish iris", "yellowish"
+    ],
+    "kapha": [
+        "kapha", "earth", "water", "cold", "heavy", "slow", "stable", "dense", "static",
+        "congestion", "attachment", "calm", "patient", "lethargic", "larger frame", 
+        "retention", "brown iris", "dark iris", "thick fibers", "greenish"
+    ]
+}
+
 def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callable] = None) -> List[Dict[str, Any]]:
     """
     Extract iris-related chunks from PDF with advanced NLP processing for better context.
@@ -151,6 +170,15 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
                     # Calculate relevance score
                     relevance_score = calculate_relevance_score(para)
                     
+                    # Detect dosha-related content
+                    dosha_scores = detect_dosha_content(para)
+                    
+                    # Determine primary dosha (if any)
+                    max_dosha_score = max(dosha_scores.values())
+                    primary_dosha = None
+                    if max_dosha_score >= 0.3:  # Only consider it a dosha chunk if score is significant
+                        primary_dosha = max(dosha_scores, key=dosha_scores.get)
+                    
                     # Add structured chunk
                     all_chunks.append({
                         "text": para.strip(),
@@ -162,7 +190,10 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
                         "sentence_count": len(sentences),
                         "entities": entities,
                         "keywords": keywords,
-                        "relevance_score": relevance_score
+                        "relevance_score": relevance_score,
+                        "dosha_scores": dosha_scores,
+                        "primary_dosha": primary_dosha,
+                        "is_dosha_related": max_dosha_score >= 0.3
                     })
     
     # Second pass: OCR extraction for images and diagrams
@@ -217,12 +248,24 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
                             keywords = extract_keywords(para)
                             sentences = sent_tokenize(para)
                             relevance_score = calculate_relevance_score(para)
+                            
+                            # Detect dosha-related content
+                            dosha_scores = detect_dosha_content(para)
+                            
+                            # Determine primary dosha (if any)
+                            max_dosha_score = max(dosha_scores.values())
+                            primary_dosha = None
+                            if max_dosha_score >= 0.3:  # Only consider it a dosha chunk if score is significant
+                                primary_dosha = max(dosha_scores, key=dosha_scores.get)
                         except Exception as e:
                             print(f"NLP processing error for OCR text: {str(e)}")
                             entities = []
                             keywords = []
                             sentences = [para]
                             relevance_score = 0.5
+                            dosha_scores = {"vata": 0.0, "pitta": 0.0, "kapha": 0.0}
+                            primary_dosha = None
+                            max_dosha_score = 0.0
                         
                         # Add structured chunk
                         all_chunks.append({
@@ -235,7 +278,10 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
                             "sentence_count": len(sentences),
                             "entities": entities,
                             "keywords": keywords,
-                            "relevance_score": relevance_score
+                            "relevance_score": relevance_score,
+                            "dosha_scores": dosha_scores,
+                            "primary_dosha": primary_dosha,
+                            "is_dosha_related": max_dosha_score >= 0.3
                         })
                         
     except Exception as e:
@@ -330,6 +376,51 @@ def extract_structured_chunks(pdf_path: str, progress_callback: Optional[Callabl
         print("4. If running with Python 3.13, try using Python 3.10-3.12 for better compatibility with NLP libraries")
     
     return enhanced_chunks
+
+def detect_dosha_content(text: str) -> Dict[str, float]:
+    """
+    Detect and score dosha-related content in the text.
+    
+    Args:
+        text: Input text to analyze
+        
+    Returns:
+        Dictionary with dosha types as keys and relevance scores as values
+    """
+    text_lower = text.lower()
+    dosha_scores = {"vata": 0.0, "pitta": 0.0, "kapha": 0.0}
+    
+    # Count occurrences of each dosha keyword
+    for dosha, keywords in DOSHA_KEYWORDS.items():
+        score = 0
+        for keyword in keywords:
+            # Count occurrences and increase score
+            count = text_lower.count(keyword)
+            score += count
+            
+            # Give extra weight to explicit mentions of the dosha name
+            if keyword.lower() == dosha.lower() and count > 0:
+                score += 2 * count
+                
+            # Look for specific patterns with higher relevance
+            # Format: "dosha_name + related concept"
+            patterns = [
+                f"{dosha} (constitution|type|dominant|dosha)",  # Direct dosha references
+                f"{dosha} (iris|eye)",                         # Iris-specific references
+                f"{dosha} (imbalance|excess|deficiency)",      # Health-related references
+                f"(high|low|balanced) {dosha}"                 # Assessment references
+            ]
+            
+            for pattern in patterns:
+                if re.search(pattern, text_lower):
+                    score += 3
+    
+        # Normalize score based on text length (to avoid bias toward longer texts)
+        text_length = len(text_lower.split())
+        normalized_score = score / max(10, text_length) * 10  # Scale to a reasonable range
+        dosha_scores[dosha] = min(1.0, normalized_score)  # Cap at 1.0
+    
+    return dosha_scores
 
 def is_relevant_content(text: str) -> bool:
     """Check if the text contains any iris or health-related content."""
@@ -469,19 +560,16 @@ def extract_keywords(text: str) -> List[str]:
         keywords = [word for word, freq in word_freq.most_common(top_n)]
         
         # Add any iris or health keywords that appear in the text
-        text_lower = text.lower()
-        for word in IRIS_KEYWORDS.union(HEALTH_KEYWORDS):
-            if word in text_lower and word not in keywords:
-                keywords.append(word)
-                
-        # If we still have no keywords, extract any words that might be relevant
-        if not keywords:
-            print("No keywords found through standard extraction, trying fallback method...")
-            # Try to extract any words that might be relevant based on length and frequency
-            words = re.findall(r'\b[a-zA-Z]{5,}\b', text)
-            if words:
-                keywords = list(set([w.lower() for w in words]))[:10]
-                
+        for keyword in IRIS_KEYWORDS:
+            if keyword.lower() in text.lower() and keyword not in keywords:
+                keywords.append(keyword)
+        
+        # Add dosha-related keywords
+        for dosha, dosha_words in DOSHA_KEYWORDS.items():
+            for keyword in dosha_words:
+                if keyword.lower() in text.lower() and keyword not in keywords:
+                    keywords.append(keyword)
+        
         return keywords
     except Exception as e:
         print(f"Error in keyword extraction: {e}")

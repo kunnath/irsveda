@@ -14,6 +14,7 @@ import time
 from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime
+import re
 
 # Import our modules
 from iris_advanced_segmentation import preprocess_image, segment_iris, extract_iris_zones
@@ -21,16 +22,31 @@ from iris_feature_extractor import extract_all_features
 from iris_pattern_matcher import IrisPatternMatcher
 from iris_zone_analyzer import IrisZoneAnalyzer  # Import the existing zone analyzer
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Import our new deep analysis modules (after logger is defined)
+try:
+    from enhanced_iris_spot_analyzer import EnhancedIrisSpotAnalyzer
+    ENHANCED_SPOT_ANALYZER_AVAILABLE = True
+except ImportError:
+    ENHANCED_SPOT_ANALYZER_AVAILABLE = False
+    logger.warning("Enhanced spot analyzer not available")
+
+try:
+    from iris_deep_analysis import IrisDeepAnalyzer
+    DEEP_ANALYZER_AVAILABLE = True
+except ImportError:
+    DEEP_ANALYZER_AVAILABLE = False
+    logger.warning("Deep analyzer not available")
+
 # Try to import the suggested queries generator (optional)
 try:
     from suggested_queries import SuggestedQueriesGenerator
     QUERIES_GENERATOR_AVAILABLE = True
 except ImportError:
     QUERIES_GENERATOR_AVAILABLE = False
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class AdvancedIrisAnalyzer:
     """
@@ -59,6 +75,16 @@ class AdvancedIrisAnalyzer:
         
         # Initialize the existing zone analyzer for compatibility
         self.zone_analyzer = IrisZoneAnalyzer()
+        
+        # Initialize the enhanced spot analyzer if available
+        self.enhanced_spot_analyzer = None
+        if ENHANCED_SPOT_ANALYZER_AVAILABLE:
+            self.enhanced_spot_analyzer = EnhancedIrisSpotAnalyzer()
+        
+        # Initialize the deep analyzer if available
+        self.deep_analyzer = None
+        if DEEP_ANALYZER_AVAILABLE:
+            self.deep_analyzer = IrisDeepAnalyzer()
         
         # Initialize the query generator if available
         self.query_generator = None
@@ -97,12 +123,13 @@ class AdvancedIrisAnalyzer:
             logger.error(f"Error loading image: {str(e)}")
             return None
     
-    def analyze_iris(self, image_path: str) -> Dict[str, Any]:
+    def analyze_iris(self, image_path: str, enhanced_qdrant_client=None) -> Dict[str, Any]:
         """
         Perform comprehensive iris analysis on an image.
         
         Args:
             image_path: Path to the iris image file
+            enhanced_qdrant_client: Optional EnhancedIrisQdrantClient for fetching knowledge
             
         Returns:
             Dictionary with analysis results
@@ -138,6 +165,48 @@ class AdvancedIrisAnalyzer:
             # Step 6: Also run the existing zone analyzer for compatibility
             zone_results = self.zone_analyzer.process_iris_image(image_path)
             
+            # Step 6.5: Perform deep spot, line, and color analysis
+            deep_analysis_results = {}
+            if self.enhanced_spot_analyzer is not None:
+                try:
+                    enhanced_spot_analysis = self.enhanced_spot_analyzer.comprehensive_spot_analysis(
+                        original_image, segmentation_data
+                    )
+                    deep_analysis_results["enhanced_spot_analysis"] = enhanced_spot_analysis
+                except Exception as e:
+                    logger.warning(f"Enhanced spot analysis failed: {str(e)}")
+                    deep_analysis_results["enhanced_spot_analysis"] = {"error": str(e)}
+            
+            if self.deep_analyzer is not None:
+                try:
+                    # Perform deep spot analysis
+                    deep_spot_analysis = self.deep_analyzer.deep_spot_analysis(
+                        original_image, segmentation_data
+                    )
+                    deep_analysis_results["deep_spot_analysis"] = deep_spot_analysis
+                    
+                    # Perform deep line analysis
+                    deep_line_analysis = self.deep_analyzer.deep_line_analysis(
+                        original_image, segmentation_data
+                    )
+                    deep_analysis_results["deep_line_analysis"] = deep_line_analysis
+                    
+                    # Perform deep color analysis
+                    deep_color_analysis = self.deep_analyzer.deep_color_analysis(
+                        original_image, segmentation_data
+                    )
+                    deep_analysis_results["deep_color_analysis"] = deep_color_analysis
+                    
+                    # Perform comprehensive texture analysis
+                    texture_analysis = self.deep_analyzer.comprehensive_texture_analysis(
+                        original_image, segmentation_data
+                    )
+                    deep_analysis_results["texture_analysis"] = texture_analysis
+                    
+                except Exception as e:
+                    logger.warning(f"Deep analysis failed: {str(e)}")
+                    deep_analysis_results["deep_analysis_error"] = str(e)
+            
             # Step 7: Generate suggested health queries (if query generator is available)
             suggested_queries = []
             if self.query_generator is not None:
@@ -164,6 +233,7 @@ class AdvancedIrisAnalyzer:
                     "spot_count": features.get("num_spots", 0),
                     "texture_stats": features.get("texture_features", {})
                 },
+                "iris_spot_analysis": deep_analysis_results,
                 "similar_patterns": similar_patterns,
                 "suggested_queries": suggested_queries,
                 "image_paths": {
@@ -201,6 +271,19 @@ class AdvancedIrisAnalyzer:
             # Generate suggested queries if the generator is available
             if self.query_generator and "suggested_queries" not in analysis_result:
                 analysis_result["suggested_queries"] = self.query_generator.generate_query_from_iris_features(analysis_result.get("features", {}))
+            
+            # Add knowledge summary if Qdrant client is available
+            if enhanced_qdrant_client:
+                # Create a feature set for knowledge retrieval
+                knowledge_features = features.copy()
+                
+                # Add pupil/iris ratio for knowledge lookup
+                if segmentation_data["iris_radius"] > 0 and segmentation_data["pupil_radius"]:
+                    knowledge_features["pupil_iris_ratio"] = segmentation_data["pupil_radius"] / segmentation_data["iris_radius"]
+                
+                # Fetch knowledge from Qdrant
+                knowledge_summary = self.fetch_knowledge_summary(knowledge_features, enhanced_qdrant_client)
+                analysis_result["knowledge_summary"] = knowledge_summary
             
             return analysis_result
             
@@ -346,3 +429,222 @@ class AdvancedIrisAnalyzer:
         except Exception as e:
             logger.error(f"Error generating health insights: {str(e)}")
             return {"error": f"Failed to generate insights: {str(e)}"}
+    
+    def fetch_knowledge_summary(self, features: Dict[str, Any], enhanced_qdrant_client = None) -> Dict[str, Any]:
+        """
+        Fetch relevant knowledge from the Qdrant database to enhance the analysis summary.
+        
+        Args:
+            features: Extracted iris features
+            enhanced_qdrant_client: Optional EnhancedIrisQdrantClient instance
+            
+        Returns:
+            Dictionary with knowledge-based insights
+        """
+        if not enhanced_qdrant_client:
+            logger.warning("No Qdrant client provided for knowledge retrieval")
+            return {
+                "available": False,
+                "message": "Knowledge base not accessible"
+            }
+            
+        # Build targeted queries based on extracted features
+        queries = []
+        
+        # Add queries based on pupil/iris ratio if available
+        if "pupil_iris_ratio" in features:
+            ratio = features["pupil_iris_ratio"]
+            if ratio > 0.4:
+                queries.append("large pupil iris ratio significance")
+            elif ratio < 0.25:
+                queries.append("small pupil iris ratio meaning")
+            else:
+                queries.append("normal pupil iris ratio")
+        
+        # Add queries based on spot count
+        if "spot_count" in features:
+            spot_count = features["spot_count"]
+            if spot_count > 10:
+                queries.append("numerous iris spots significance")
+            elif spot_count > 5:
+                queries.append("moderate iris spots meaning")
+            elif spot_count > 0:
+                queries.append("few iris spots interpretation")
+        
+        # Add queries based on dominant colors
+        if "color_summary" in features and features["color_summary"]:
+            color_info = features["color_summary"][0]
+            color_str = color_info.get("color", "")
+            # Extract RGB values from the color string
+            rgb_match = re.search(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', color_str)
+            if rgb_match:
+                r, g, b = map(int, rgb_match.groups())
+                if r > 150 and g > 150 and b < 100:  # Yellow/amber
+                    queries.append("yellow amber iris meaning")
+                elif r > 150 and g < 100 and b < 100:  # Reddish
+                    queries.append("red or reddish iris significance")
+                elif r < 100 and g < 100 and b > 150:  # Blue
+                    queries.append("blue iris in iridology")
+                elif r < 100 and g > 150 and b < 100:  # Green
+                    queries.append("green iris meaning in iridology")
+                elif r > 100 and g > 50 and b < 50:  # Brown
+                    queries.append("brown iris iridology significance")
+        
+        # Add general interpretation queries
+        queries.append("iris analysis interpretation principles")
+        
+        # Use the first 3 queries to avoid overloading
+        knowledge_results = {}
+        insights = []
+        
+        # Get dosha information if available in the zone analysis
+        dosha_proportions = self._get_dosha_proportions_from_features(features)
+        primary_dosha = max(dosha_proportions, key=dosha_proportions.get) if dosha_proportions else None
+        
+        # Process regular queries first
+        for i, query in enumerate(queries[:3]):
+            try:
+                # Use multi_query_search for better results
+                results = enhanced_qdrant_client.multi_query_search(query, limit=1)
+                if results and len(results) > 0:
+                    # Extract the most relevant information from each result
+                    top_result = results[0]
+                    insights.append({
+                        "query": query,
+                        "insight": top_result.get("text", "No information available"),
+                        "source": top_result.get("source", "Unknown"),
+                        "page": top_result.get("page", 0),
+                        "score": top_result.get("score", 0)
+                    })
+            except Exception as e:
+                logger.error(f"Error fetching knowledge for query '{query}': {str(e)}")
+        
+        # Add dosha-specific information if primary dosha is available
+        dosha_insights = []
+        if primary_dosha and dosha_proportions[primary_dosha] >= 0.4:
+            try:
+                # Create dosha-specific query based on iris features
+                dosha_query = f"{primary_dosha} dosha iris characteristics"
+                
+                # Use the new dosha-specific search
+                dosha_results = enhanced_qdrant_client.search_by_dosha(
+                    dosha_type=primary_dosha,
+                    query="iris characteristics", 
+                    limit=2
+                )
+                
+                if dosha_results and len(dosha_results) > 0:
+                    for result in dosha_results:
+                        dosha_insights.append({
+                            "dosha": primary_dosha,
+                            "query": dosha_query,
+                            "insight": result.get("text", "No dosha information available"),
+                            "source": result.get("source", "Unknown"),
+                            "page": result.get("page", 0),
+                            "score": result.get("score", 0),
+                            "is_dosha_specific": True
+                        })
+            except Exception as e:
+                logger.error(f"Error fetching dosha knowledge: {str(e)}")
+        
+        # Add secondary dosha information if available
+        secondary_doshas = [d for d in dosha_proportions if d != primary_dosha and dosha_proportions[d] >= 0.25]
+        for dosha in secondary_doshas[:1]:  # Only get info for the strongest secondary dosha
+            try:
+                # Get secondary dosha information
+                sec_results = enhanced_qdrant_client.search_by_dosha(
+                    dosha_type=dosha,
+                    query="brief description", 
+                    limit=1
+                )
+                
+                if sec_results and len(sec_results) > 0:
+                    result = sec_results[0]
+                    dosha_insights.append({
+                        "dosha": dosha,
+                        "query": f"{dosha} dosha brief description",
+                        "insight": result.get("text", "No information available"),
+                        "source": result.get("source", "Unknown"),
+                        "page": result.get("page", 0),
+                        "score": result.get("score", 0),
+                        "is_dosha_specific": True,
+                        "is_secondary": True
+                    })
+            except Exception as e:
+                logger.error(f"Error fetching secondary dosha info: {str(e)}")
+        
+        # Combine all insights
+        all_insights = insights + dosha_insights
+        
+        # Create the knowledge results
+        knowledge_results = {
+            "available": len(all_insights) > 0,
+            "insights": all_insights,
+            "queries_used": queries[:3],
+            "dosha_distribution": dosha_proportions,
+            "primary_dosha": primary_dosha
+        }
+        
+        return knowledge_results
+
+    def _get_dosha_proportions_from_features(self, features: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Extract dosha proportions from iris features.
+        
+        Args:
+            features: Extracted iris features
+            
+        Returns:
+            Dictionary with dosha types as keys and their proportions as values
+        """
+        dosha_proportions = {"vata": 0.0, "pitta": 0.0, "kapha": 0.0}
+        
+        # Try to get dosha information from iris color
+        if "color_summary" in features and features["color_summary"]:
+            color_info = features["color_summary"][0]
+            color_str = color_info.get("color", "")
+            rgb_match = re.search(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', color_str)
+            
+            if rgb_match:
+                r, g, b = map(int, rgb_match.groups())
+                
+                # Associate colors with doshas
+                if r < 100 and g < 100 and b > 150:  # Blue - Vata
+                    dosha_proportions["vata"] += 0.6
+                    dosha_proportions["pitta"] += 0.2
+                    dosha_proportions["kapha"] += 0.2
+                elif r > 150 and g < 100 and b < 100:  # Reddish - Pitta
+                    dosha_proportions["pitta"] += 0.7
+                    dosha_proportions["vata"] += 0.2
+                    dosha_proportions["kapha"] += 0.1
+                elif r > 100 and g > 50 and b < 50:  # Brown - Kapha
+                    dosha_proportions["kapha"] += 0.6
+                    dosha_proportions["pitta"] += 0.3
+                    dosha_proportions["vata"] += 0.1
+                elif r < 100 and g > 150 and b < 100:  # Green - Pitta/Kapha
+                    dosha_proportions["pitta"] += 0.5
+                    dosha_proportions["kapha"] += 0.4
+                    dosha_proportions["vata"] += 0.1
+                elif r > 150 and g > 150 and b < 100:  # Yellow/amber - Pitta/Vata
+                    dosha_proportions["pitta"] += 0.5
+                    dosha_proportions["vata"] += 0.4
+                    dosha_proportions["kapha"] += 0.1
+        
+        # Adjust based on pupil/iris ratio if available
+        if "pupil_iris_ratio" in features:
+            ratio = features["pupil_iris_ratio"]
+            if ratio > 0.4:  # Large pupils - more Vata
+                dosha_proportions["vata"] = min(1.0, dosha_proportions["vata"] + 0.2)
+                dosha_proportions["pitta"] = max(0.0, dosha_proportions["pitta"] - 0.1)
+                dosha_proportions["kapha"] = max(0.0, dosha_proportions["kapha"] - 0.1)
+            elif ratio < 0.25:  # Small pupils - more Kapha
+                dosha_proportions["kapha"] = min(1.0, dosha_proportions["kapha"] + 0.2)
+                dosha_proportions["vata"] = max(0.0, dosha_proportions["vata"] - 0.1)
+                dosha_proportions["pitta"] = max(0.0, dosha_proportions["pitta"] - 0.1)
+        
+        # Normalize to ensure they sum to 1.0
+        total = sum(dosha_proportions.values())
+        if total > 0:
+            dosha_proportions = {k: v/total for k, v in dosha_proportions.items()}
+        
+        return dosha_proportions

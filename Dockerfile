@@ -24,6 +24,13 @@ RUN pip install --no-cache-dir numpy==1.24.3
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir fpdf>=1.7.2
 
+# Download NLTK resources - ensuring punkt_tab is available
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('wordnet'); nltk.download('averaged_perceptron_tagger')"
+# Download all NLTK corpora to ensure punkt_tab is available
+RUN python -c "import nltk; nltk.download('all')"
+# Verify punkt_tab is available
+RUN python -c "import nltk; import os; print('NLTK Data Path:', nltk.data.path); print('punkt_tab exists:', os.path.exists(os.path.join(nltk.data.path[0], 'tokenizers/punkt_tab')))"
+
 # Copy application code
 COPY . .
 
@@ -41,8 +48,7 @@ RUN apt-get update && apt-get install -y curl \
 # Install additional dependencies and models with proper versioning
 RUN pip install --no-cache-dir scikit-learn==1.2.2 && \
     pip install --no-cache-dir spacy==3.5.3 --no-build-isolation && \
-    python -m pip install --no-cache-dir --no-deps https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0-py3-none-any.whl && \
-    python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
+    python -m pip install --no-cache-dir --no-deps https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0-py3-none-any.whl
 
 # Expose port for Streamlit
 EXPOSE 8501

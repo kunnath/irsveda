@@ -19,6 +19,29 @@ from advanced_iris_analyzer import AdvancedIrisAnalyzer
 from iris_dataset_matcher import DatasetPatternMatcher
 from suggested_queries import SuggestedQueriesGenerator
 
+# Try to import enhanced iris image analyzer with fallback
+try:
+    from enhanced_iris_image_analyzer import EnhancedIrisImageAnalyzer
+    ENHANCED_IMAGE_ANALYZER_AVAILABLE = True
+    # Check if matplotlib is available for the enhanced analyzer
+    try:
+        import matplotlib.pyplot as plt
+        MATPLOTLIB_AVAILABLE = True
+    except ImportError:
+        MATPLOTLIB_AVAILABLE = False
+except ImportError as e:
+    ENHANCED_IMAGE_ANALYZER_AVAILABLE = False
+    MATPLOTLIB_AVAILABLE = False
+    print(f"Enhanced iris image analyzer not available: {e}")
+    # Create a placeholder class
+    class EnhancedIrisImageAnalyzer:
+        def __init__(self, *args, **kwargs):
+            pass
+        def analyze_iris_image(self, *args, **kwargs):
+            return {"error": "Enhanced image analyzer not available"}
+        def set_detection_sensitivity(self, *args, **kwargs):
+            pass
+
 # Keep the original imports for backward compatibility
 from pdf_extractor import extract_iris_chunks
 from iris_qdrant import IrisQdrantClient
@@ -27,6 +50,20 @@ from iris_predictor import IrisPredictor
 # Import the new IrisZone analyzer
 from iris_zone_analyzer import IrisZoneAnalyzer
 from iris_report_generator import IrisReportGenerator
+
+# Import enhanced report generator
+try:
+    from enhanced_iris_report_generator import EnhancedIrisReportGenerator
+    ENHANCED_REPORT_GENERATOR_AVAILABLE = True
+except ImportError as e:
+    ENHANCED_REPORT_GENERATOR_AVAILABLE = False
+    print(f"Enhanced report generator not available: {e}")
+    # Create placeholder
+    class EnhancedIrisReportGenerator:
+        def generate_enhanced_pdf_report(self, *args, **kwargs):
+            return None
+        def generate_enhanced_html_report(self, *args, **kwargs):
+            return "Enhanced report generator not available"
 
 # Define helper functions first, before they are used
 def get_score_color(score):
@@ -246,6 +283,10 @@ if "iris_zone_analyzer" not in st.session_state:
 if "iris_report_generator" not in st.session_state:
     st.session_state.iris_report_generator = IrisReportGenerator()
 
+# Initialize enhanced report generator
+if "enhanced_iris_report_generator" not in st.session_state and ENHANCED_REPORT_GENERATOR_AVAILABLE:
+    st.session_state.enhanced_iris_report_generator = EnhancedIrisReportGenerator()
+
 if "advanced_iris_analyzer" not in st.session_state:
     # Use environment variables if available (for Docker)
     qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
@@ -256,6 +297,12 @@ if "advanced_iris_analyzer" not in st.session_state:
         qdrant_port=qdrant_port,
         collection_name="iris_patterns"
     )
+
+if "enhanced_iris_image_analyzer" not in st.session_state:
+    if ENHANCED_IMAGE_ANALYZER_AVAILABLE:
+        st.session_state.enhanced_iris_image_analyzer = EnhancedIrisImageAnalyzer()
+    else:
+        st.session_state.enhanced_iris_image_analyzer = EnhancedIrisImageAnalyzer()  # placeholder
 
 if "query_generator" not in st.session_state:
     st.session_state.query_generator = SuggestedQueriesGenerator()
@@ -275,7 +322,7 @@ if "is_enhanced_initialized" not in st.session_state:
 st.title("IridoVeda")
 
 # Tab layout
-tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "🔬 IrisZone", "🧬 Advanced Analysis", "📊 Statistics", "⚙️ Configuration"])
+tabs = st.tabs(["📚 PDF Upload & Processing", "🔍 Knowledge Query", "👁️ Iris Analysis", "🔬 IrisZone", "🧬 Advanced Analysis", "🌿 Dosha Analysis", "📊 Statistics", "⚙️ Configuration"])
 
 # First tab - PDF Upload with enhanced processing
 with tabs[0]:
@@ -505,7 +552,8 @@ with tabs[1]:
         query = st.text_input(
             "Ask a question about iridology:",
             value=input_value,
-            placeholder="How does the iris pattern reflect liver conditions in iridology?"
+            placeholder="How does the iris pattern reflect liver conditions in iridology?",
+            key="main_query_input"
         )
         
         # Reset the clicked state if the user changes the query
@@ -935,11 +983,11 @@ with tabs[3]:
                     user_info = {}
                     col1, col2 = st.columns(2)
                     with col1:
-                        user_info["Name"] = st.text_input("Name", "")
-                        user_info["Age"] = st.text_input("Age", "")
+                        user_info["Name"] = st.text_input("Name", "", key="zone_report_name")
+                        user_info["Age"] = st.text_input("Age", "", key="zone_report_age")
                     with col2:
-                        user_info["Gender"] = st.selectbox("Gender", ["", "Male", "Female", "Other"])
-                        user_info["Date"] = st.date_input("Date", datetime.now()).strftime("%Y-%m-%d")
+                        user_info["Gender"] = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="zone_report_gender")
+                        user_info["Date"] = st.date_input("Date", datetime.now(), key="zone_report_date").strftime("%Y-%m-%d")
                     
                     # Remove empty fields
                     user_info = {k: v for k, v in user_info.items() if v}
@@ -1007,8 +1055,374 @@ with tabs[3]:
             # Clean up temp file
             os.unlink(temp_zone_path)
 
-# Sixth tab - Statistics with enhanced metrics
+# Sixth tab - Dosha Analysis
 with tabs[5]:
+    st.header("🌿 Ayurvedic Dosha Analysis")
+    
+    st.info(
+        "Comprehensive Ayurvedic dosha analysis using iris image analysis. "
+        "This feature quantifies Vata, Pitta, and Kapha doshas, provides metabolic health indicators, "
+        "and offers personalized Ayurvedic recommendations based on your constitutional makeup."
+    )
+    
+    # Add explanation for dosha analysis
+    with st.expander("Understanding Dosha Analysis", expanded=True):
+        st.markdown("""
+        **Ayurvedic Dosha Analysis includes:**
+        
+        * **Constitutional Assessment** - Determine your Prakriti (original constitution) and Vikriti (current state)
+        * **Dosha Quantification** - Precise percentage calculation of Vata, Pitta, and Kapha
+        * **Metabolic Health Metrics** - BMR, lipid profiles, inflammation markers, and gut health indicators
+        * **Organ Health Assessment** - Evaluation of major organs based on iris zones and dosha influences
+        * **Personalized Recommendations** - Diet, lifestyle, and treatment suggestions based on your dosha profile
+        * **Imbalance Detection** - Identify specific dosha imbalances and their severity
+        """)
+    
+    # Create uploader for dosha analysis
+    uploaded_dosha_image = st.file_uploader(
+        "Upload iris image for dosha analysis", 
+        type=["jpg", "jpeg", "png"],
+        key="dosha_image_uploader",
+        help="Upload a clear and high-resolution iris image for comprehensive dosha analysis"
+    )
+    
+    if uploaded_dosha_image:
+        # Save temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+            tmp_file.write(uploaded_dosha_image.read())
+            temp_dosha_path = tmp_file.name
+        
+        try:
+            # Import dosha quantification model
+            from dosha_quantification_model import DoshaQuantificationModel, MetabolicIndicators, OrganHealthAssessment
+            
+            # Initialize dosha model
+            if 'dosha_model' not in st.session_state:
+                st.session_state.dosha_model = DoshaQuantificationModel()
+            
+            # Process iris image for dosha analysis
+            with st.spinner("Performing comprehensive dosha analysis..."):
+                dosha_results = st.session_state.dosha_model.analyze_iris_for_doshas(temp_dosha_path)
+                
+                if "error" in dosha_results:
+                    st.error(dosha_results["error"])
+                else:
+                    # Create tabs for different dosha analysis views
+                    dosha_tabs = st.tabs([
+                        "Constitutional Profile", 
+                        "Dosha Distribution", 
+                        "Metabolic Health", 
+                        "Organ Assessment", 
+                        "Recommendations", 
+                        "Detailed Report"
+                    ])
+                    
+                    # Constitutional Profile tab
+                    with dosha_tabs[0]:
+                        st.subheader("Your Ayurvedic Constitutional Profile")
+                        
+                        dosha_profile = dosha_results.get("dosha_profile", {})
+                        
+                        if dosha_profile:
+                            col1, col2 = st.columns([2, 1])
+                            
+                            with col1:
+                                # Display primary constitution
+                                primary_dosha = dosha_profile.get("primary_dosha", "unknown")
+                                secondary_dosha = dosha_profile.get("secondary_dosha", None)
+                                
+                                st.markdown(f"### Primary Constitution: **{primary_dosha.upper()}**")
+                                if secondary_dosha:
+                                    st.markdown(f"### Secondary Constitution: **{secondary_dosha.upper()}**")
+                                
+                                # Constitution description
+                                constitution_desc = {
+                                    "vata": "Air and ether elements. Characterized by movement, creativity, and quick thinking. Tends toward dryness, coldness, and variability.",
+                                    "pitta": "Fire and water elements. Characterized by metabolism, digestion, and transformation. Tends toward heat, intensity, and precision.",
+                                    "kapha": "Water and earth elements. Characterized by structure, stability, and immunity. Tends toward moisture, coolness, and steadiness."
+                                }
+                                
+                                if primary_dosha in constitution_desc:
+                                    st.markdown(f"**Description:** {constitution_desc[primary_dosha]}")
+                                
+                                # Balance assessment
+                                balance_score = dosha_profile.get("balance_score", 0)
+                                imbalance_type = dosha_profile.get("imbalance_type", None)
+                                
+                                st.markdown("### Constitutional Balance")
+                                balance_color = "green" if balance_score > 0.7 else "orange" if balance_score > 0.4 else "red"
+                                st.markdown(f"**Balance Score:** <span style='color: {balance_color}'>{balance_score:.2f}</span>", unsafe_allow_html=True)
+                                st.progress(balance_score)
+                                
+                                if imbalance_type:
+                                    st.warning(f"**Detected Imbalance:** {imbalance_type}")
+                            
+                            with col2:
+                                # Display constitutional percentages
+                                st.markdown("### Dosha Percentages")
+                                
+                                vata_pct = dosha_profile.get("vata_percentage", 0) * 100
+                                pitta_pct = dosha_profile.get("pitta_percentage", 0) * 100
+                                kapha_pct = dosha_profile.get("kapha_percentage", 0) * 100
+                                
+                                # Create dosha percentage visualization
+                                fig, ax = plt.subplots(figsize=(6, 6))
+                                colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']  # Vata, Pitta, Kapha colors
+                                sizes = [vata_pct, pitta_pct, kapha_pct]
+                                labels = [f'Vata\n{vata_pct:.1f}%', f'Pitta\n{pitta_pct:.1f}%', f'Kapha\n{kapha_pct:.1f}%']
+                                
+                                wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='', startangle=90)
+                                ax.set_title('Constitutional Distribution', fontsize=14, fontweight='bold')
+                                
+                                st.pyplot(fig)
+                    
+                    # Dosha Distribution tab
+                    with dosha_tabs[1]:
+                        st.subheader("Detailed Dosha Analysis")
+                        
+                        dosha_profile = dosha_results.get("dosha_profile", {})
+                        
+                        if dosha_profile:
+                            # Create three columns for each dosha
+                            vata_col, pitta_col, kapha_col = st.columns(3)
+                            
+                            with vata_col:
+                                st.markdown("#### 💨 VATA (Air + Ether)")
+                                vata_score = dosha_profile.get("vata_score", 0)
+                                vata_pct = dosha_profile.get("vata_percentage", 0) * 100
+                                
+                                st.metric("Score", f"{vata_score:.2f}")
+                                st.metric("Percentage", f"{vata_pct:.1f}%")
+                                st.progress(vata_pct/100)
+                                
+                                st.markdown("**Qualities:**")
+                                st.markdown("- Movement & circulation")
+                                st.markdown("- Nervous system function")
+                                st.markdown("- Mental activity & creativity")
+                                st.markdown("- Elimination processes")
+                            
+                            with pitta_col:
+                                st.markdown("#### 🔥 PITTA (Fire + Water)")
+                                pitta_score = dosha_profile.get("pitta_score", 0)
+                                pitta_pct = dosha_profile.get("pitta_percentage", 0) * 100
+                                
+                                st.metric("Score", f"{pitta_score:.2f}")
+                                st.metric("Percentage", f"{pitta_pct:.1f}%")
+                                st.progress(pitta_pct/100)
+                                
+                                st.markdown("**Qualities:**")
+                                st.markdown("- Digestion & metabolism")
+                                st.markdown("- Body temperature regulation")
+                                st.markdown("- Intelligence & focus")
+                                st.markdown("- Hormone production")
+                            
+                            with kapha_col:
+                                st.markdown("#### 🌊 KAPHA (Water + Earth)")
+                                kapha_score = dosha_profile.get("kapha_score", 0)
+                                kapha_pct = dosha_profile.get("kapha_percentage", 0) * 100
+                                
+                                st.metric("Score", f"{kapha_score:.2f}")
+                                st.metric("Percentage", f"{kapha_pct:.1f}%")
+                                st.progress(kapha_pct/100)
+                                
+                                st.markdown("**Qualities:**")
+                                st.markdown("- Structure & stability")
+                                st.markdown("- Immunity & strength")
+                                st.markdown("- Lubrication & moisture")
+                                st.markdown("- Growth & repair")
+                    
+                    # Metabolic Health tab
+                    with dosha_tabs[2]:
+                        st.subheader("Metabolic Health Indicators")
+                        
+                        metabolic_data = dosha_results.get("metabolic_indicators", {})
+                        
+                        if metabolic_data:
+                            # Create metrics display
+                            met_col1, met_col2 = st.columns(2)
+                            
+                            with met_col1:
+                                st.markdown("#### Energy & Metabolism")
+                                
+                                bmr = metabolic_data.get("basal_metabolic_rate", 0)
+                                st.metric("Basal Metabolic Rate", f"{bmr:.0f} kcal/day")
+                                
+                                metabolic_efficiency = metabolic_data.get("metabolic_efficiency", 0)
+                                st.metric("Metabolic Efficiency", f"{metabolic_efficiency:.1%}")
+                                
+                                energy_level = metabolic_data.get("energy_level", 0)
+                                st.metric("Energy Level", f"{energy_level:.1f}/10")
+                                
+                                st.markdown("#### Digestive Health")
+                                
+                                digestive_fire = metabolic_data.get("digestive_fire", 0)
+                                st.metric("Digestive Fire (Agni)", f"{digestive_fire:.1f}/10")
+                                
+                                gut_health = metabolic_data.get("gut_diversity", 0)
+                                st.metric("Gut Health Score", f"{gut_health:.1f}/10")
+                            
+                            with met_col2:
+                                st.markdown("#### Cardiovascular & Inflammatory Markers")
+                                
+                                serum_lipid = metabolic_data.get("serum_lipid", 0)
+                                st.metric("Serum Lipid", f"{serum_lipid:.0f} mg/dL")
+                                
+                                triglycerides = metabolic_data.get("triglycerides", 0)
+                                st.metric("Triglycerides", f"{triglycerides:.0f} mg/dL")
+                                
+                                crp_level = metabolic_data.get("crp_level", 0)
+                                st.metric("Inflammation (CRP)", f"{crp_level:.2f} mg/L")
+                                
+                                st.markdown("#### Stress & Recovery")
+                                
+                                stress_level = metabolic_data.get("stress_indicators", {}).get("overall_stress", 0)
+                                st.metric("Stress Level", f"{stress_level:.1f}/10")
+                                
+                                recovery_capacity = metabolic_data.get("recovery_capacity", 0)
+                                st.metric("Recovery Capacity", f"{recovery_capacity:.1f}/10")
+                    
+                    # Organ Assessment tab
+                    with dosha_tabs[3]:
+                        st.subheader("Organ Health Assessment")
+                        
+                        organ_assessment = dosha_results.get("organ_health", {})
+                        
+                        if organ_assessment:
+                            # Create organ system cards
+                            organs = ["heart", "liver", "kidneys", "lungs", "digestive_system", "nervous_system"]
+                            organ_names = ["Heart", "Liver", "Kidneys", "Lungs", "Digestive System", "Nervous System"]
+                            
+                            for i in range(0, len(organs), 2):
+                                cols = st.columns(2)
+                                
+                                for j, col in enumerate(cols):
+                                    if i + j < len(organs):
+                                        organ = organs[i + j]
+                                        organ_name = organ_names[i + j]
+                                        organ_data = organ_assessment.get(organ, {})
+                                        
+                                        with col:
+                                            with st.container():
+                                                st.markdown(f"#### {organ_name}")
+                                                
+                                                health_score = organ_data.get("health_score", 0)
+                                                vitality = organ_data.get("vitality", 0)
+                                                dosha_influence = organ_data.get("dominant_dosha", "unknown")
+                                                
+                                                # Health score with color coding
+                                                score_color = "green" if health_score > 0.7 else "orange" if health_score > 0.4 else "red"
+                                                st.markdown(f"**Health Score:** <span style='color: {score_color}'>{health_score:.2f}/1.0</span>", unsafe_allow_html=True)
+                                                st.progress(health_score)
+                                                
+                                                st.metric("Vitality", f"{vitality:.1f}/10")
+                                                st.markdown(f"**Dominant Dosha:** {dosha_influence.capitalize()}")
+                                                
+                                                # Show recommendations if available
+                                                recommendations = organ_data.get("recommendations", [])
+                                                if recommendations:
+                                                    st.markdown("**Recommendations:**")
+                                                    for rec in recommendations[:2]:  # Show top 2 recommendations
+                                                        st.markdown(f"• {rec}")
+                    
+                    # Recommendations tab
+                    with dosha_tabs[4]:
+                        st.subheader("Personalized Ayurvedic Recommendations")
+                        
+                        recommendations = dosha_results.get("recommendations", {})
+                        
+                        if recommendations:
+                            # Diet recommendations
+                            if "diet" in recommendations:
+                                st.markdown("### 🍽️ Dietary Recommendations")
+                                diet_recs = recommendations["diet"]
+                                
+                                diet_col1, diet_col2 = st.columns(2)
+                                
+                                with diet_col1:
+                                    st.markdown("#### Foods to Favor")
+                                    favorable_foods = diet_recs.get("favorable_foods", [])
+                                    for food in favorable_foods:
+                                        st.markdown(f"✅ {food}")
+                                
+                                with diet_col2:
+                                    st.markdown("#### Foods to Avoid")
+                                    avoid_foods = diet_recs.get("avoid_foods", [])
+                                    for food in avoid_foods:
+                                        st.markdown(f"❌ {food}")
+                            
+                            # Lifestyle recommendations
+                            if "lifestyle" in recommendations:
+                                st.markdown("### 🧘 Lifestyle Recommendations")
+                                lifestyle_recs = recommendations["lifestyle"]
+                                
+                                for category, advice_list in lifestyle_recs.items():
+                                    if advice_list:
+                                        st.markdown(f"#### {category.replace('_', ' ').title()}")
+                                        for advice in advice_list:
+                                            st.markdown(f"• {advice}")
+                            
+                            # Herbal recommendations
+                            if "herbs" in recommendations:
+                                st.markdown("### 🌿 Herbal Recommendations")
+                                herb_recs = recommendations["herbs"]
+                                
+                                for herb_info in herb_recs:
+                                    st.markdown(f"**{herb_info.get('name', 'Unknown')}**: {herb_info.get('benefit', 'No description available')}")
+                    
+                    # Detailed Report tab
+                    with dosha_tabs[5]:
+                        st.subheader("Comprehensive Analysis Report")
+                        
+                        # Generate downloadable report
+                        if st.button("🔄 Generate Comprehensive Report", use_container_width=True):
+                            with st.spinner("Generating comprehensive dosha analysis report..."):
+                                try:
+                                    # Generate PDF report using iris report generator
+                                    if 'iris_report_generator' not in st.session_state:
+                                        from iris_report_generator import IrisReportGenerator
+                                        st.session_state.iris_report_generator = IrisReportGenerator()
+                                    
+                                    # Create a comprehensive report data structure
+                                    report_data = {
+                                        "analysis_type": "dosha_analysis",
+                                        "dosha_profile": dosha_results.get("dosha_profile", {}),
+                                        "metabolic_indicators": dosha_results.get("metabolic_indicators", {}),
+                                        "organ_health": dosha_results.get("organ_health", {}),
+                                        "recommendations": dosha_results.get("recommendations", {}),
+                                        "timestamp": datetime.now().isoformat()
+                                    }
+                                    
+                                    pdf_report = st.session_state.iris_report_generator.generate_dosha_report(report_data)
+                                    
+                                    if pdf_report is not None:
+                                        st.download_button(
+                                            label="📑 Download Dosha Analysis Report",
+                                            data=pdf_report,
+                                            file_name=f"dosha_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                            mime="application/pdf",
+                                            key="dosha_pdf_report_button",
+                                            use_container_width=True
+                                        )
+                                        st.success("✅ Comprehensive dosha analysis report generated successfully!")
+                                    else:
+                                        st.warning("PDF generation is not available. To enable PDF reports, install the 'fpdf' package.")
+                                except Exception as e:
+                                    st.error(f"Error generating report: {str(e)}")
+                        
+                        # Display raw analysis data for advanced users
+                        with st.expander("Raw Analysis Data (Advanced)", expanded=False):
+                            st.json(dosha_results)
+                        
+        except ImportError:
+            st.error("Dosha quantification model is not available. Please ensure all required modules are installed.")
+        except Exception as e:
+            st.error(f"Error performing dosha analysis: {str(e)}")
+        finally:
+            # Clean up temp file
+            os.unlink(temp_dosha_path)
+
+# Seventh tab - Statistics with enhanced metrics
+with tabs[6]:
     st.header("Knowledge Base Statistics")
     
     # Create tabs for different stats
@@ -1159,13 +1573,16 @@ with tabs[4]:
         try:
             # Process iris image using the advanced analyzer
             with st.spinner("Performing advanced iris analysis..."):
-                analysis_results = st.session_state.advanced_iris_analyzer.analyze_iris(temp_advanced_path)
+                analysis_results = st.session_state.advanced_iris_analyzer.analyze_iris(
+                    temp_advanced_path,
+                    enhanced_qdrant_client=st.session_state.enhanced_qdrant_client if st.session_state.is_enhanced_initialized else None
+                )
                 
                 if "error" in analysis_results:
                     st.error(analysis_results["error"])
                 else:
                     # Create tabs for different analysis views
-                    advanced_tabs = st.tabs(["Overview", "Color Analysis", "Spot Detection", "Texture Analysis", "Pattern Matching", "Health Insights", "Health Queries"])
+                    advanced_tabs = st.tabs(["Overview", "Enhanced Spot Detection", "Color Analysis", "Spot Detection", "Texture Analysis", "Pattern Matching", "Health Insights", "Health Queries"])
                     
                     # Overview tab
                     with advanced_tabs[0]:
@@ -1224,8 +1641,233 @@ with tabs[4]:
                                     primary_dosha = max(dosha_balance.items(), key=lambda x: x[1])[0]
                                     st.markdown(f"**Primary Dosha:** {primary_dosha.capitalize()}")
                     
-                    # Color Analysis tab
+                    # Enhanced Spot Detection tab
                     with advanced_tabs[1]:
+                        st.subheader("🔬 Enhanced Iris Spot Detection & Analysis")
+                        
+                        if not ENHANCED_IMAGE_ANALYZER_AVAILABLE:
+                            st.error("Enhanced iris image analyzer is not available. Please check that all required dependencies are installed.")
+                            st.info("Required packages: opencv-python, matplotlib, pandas, scikit-image")
+                        else:
+                            # Add sensitivity controls
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                sensitivity = st.selectbox(
+                                    "Detection Sensitivity",
+                                    ["low", "medium", "high"],
+                                    index=1,
+                                    help="Higher sensitivity detects more spots but may include false positives"
+                                )
+                            
+                            with col2:
+                                iris_side = st.selectbox(
+                                    "Iris Side",
+                                    ["left", "right", "unknown"],
+                                    index=2,
+                                    help="Select the iris side for accurate organ mapping"
+                                )
+                            
+                            with col3:
+                                if st.button("🔄 Re-analyze with Enhanced Detection", use_container_width=True):
+                                    st.session_state.enhanced_iris_image_analyzer.set_detection_sensitivity(sensitivity)
+                                    
+                                    with st.spinner("Performing enhanced spot detection..."):
+                                        enhanced_results = st.session_state.enhanced_iris_image_analyzer.analyze_iris_image(
+                                            temp_advanced_path, iris_side
+                                        )
+                                        
+                                        if "error" not in enhanced_results:
+                                            st.session_state.enhanced_analysis_results = enhanced_results
+                                            st.success(f"✅ Enhanced analysis complete! Detected {enhanced_results['total_spots']} spots using {len(enhanced_results['detection_methods_used'])} different methods.")
+                                        else:
+                                            st.error(f"Enhanced analysis failed: {enhanced_results['error']}")
+                            
+                            # Display enhanced results if available
+                            if hasattr(st.session_state, 'enhanced_analysis_results'):
+                                enhanced_results = st.session_state.enhanced_analysis_results
+                                
+                                # Create sub-tabs for enhanced analysis
+                                enhanced_subtabs = st.tabs(["Annotated Image", "Spot Details", "Organ Mapping", "Health Assessment"])
+                                
+                                with enhanced_subtabs[0]:
+                                    st.subheader("Annotated Iris Image")
+                                    
+                                    if "annotated_image" in enhanced_results:
+                                        st.image(
+                                            f"data:image/png;base64,{enhanced_results['annotated_image']}", 
+                                            caption="Enhanced spot detection with organ mapping",
+                                            use_column_width=True
+                                        )
+                                    
+                                    # Display legend for detection methods
+                                    st.markdown("#### Detection Method Legend")
+                                    
+                                    methods_used = enhanced_results.get('detection_methods_used', [])
+                                    method_info = {
+                                        'edge': ('E', 'Edge Detection', 'Green'),
+                                        'dark_spot': ('D', 'Dark Spots', 'Red'),
+                                        'light_spot': ('L', 'Light Spots', 'Orange'),
+                                        'blob': ('B', 'Blob Detection', 'Yellow'),
+                                        'adaptive': ('A', 'Adaptive Threshold', 'Pink'),
+                                        'contour': ('C', 'Contour-based', 'Magenta'),
+                                        'watershed': ('W', 'Watershed', 'Cyan')
+                                    }
+                                    
+                                    legend_cols = st.columns(min(4, len(methods_used)))
+                                    for i, method in enumerate(methods_used):
+                                        if method in method_info:
+                                            symbol, name, color = method_info[method]
+                                            with legend_cols[i % len(legend_cols)]:
+                                                st.markdown(f"**{symbol}** - {name} ({color})")
+                                
+                                with enhanced_subtabs[1]:
+                                    st.subheader("Detailed Spot Analysis")
+                                    
+                                    spots = enhanced_results.get('spots', [])
+                                    
+                                    if spots:
+                                        # Create DataFrame for display
+                                        spot_data = []
+                                        for spot in spots:
+                                            spot_data.append({
+                                                'ID': spot['segment_id'],
+                                                'Method': spot['detection_method'],
+                                                'Area (px²)': spot['area'],
+                                                'Zone': spot.get('iris_zone', 'Unknown'),
+                                                'Organ': spot.get('corresponding_organ', 'Unknown'),
+                                                'Angle (°)': f"{spot.get('angle_degrees', 0):.1f}",
+                                                'Distance (%)': f"{spot.get('distance_from_center_pct', 0):.1f}",
+                                                'Visibility': f"{spot.get('visibility', 0):.1f}",
+                                                'Brightness': f"{spot.get('avg_brightness', 0):.1f}"
+                                            })
+                                        
+                                        df_spots = pd.DataFrame(spot_data)
+                                        st.dataframe(df_spots, use_container_width=True)
+                                        
+                                        # Summary statistics
+                                        col1, col2, col3, col4 = st.columns(4)
+                                        
+                                        with col1:
+                                            st.metric("Total Spots", len(spots))
+                                        
+                                        with col2:
+                                            avg_area = np.mean([spot['area'] for spot in spots])
+                                            st.metric("Avg Area", f"{avg_area:.0f} px²")
+                                        
+                                        with col3:
+                                            avg_visibility = np.mean([spot.get('visibility', 0) for spot in spots])
+                                            st.metric("Avg Visibility", f"{avg_visibility:.1f}")
+                                        
+                                        with col4:
+                                            methods_count = len(enhanced_results.get('detection_methods_used', []))
+                                            st.metric("Detection Methods", methods_count)
+                                    else:
+                                        st.info("No spots detected with current sensitivity settings.")
+                                
+                                with enhanced_subtabs[2]:
+                                    st.subheader("Organ System Mapping")
+                                    
+                                    analysis_summary = enhanced_results.get('analysis_summary', {})
+                                    organs = analysis_summary.get('organs', {})
+                                    
+                                    if organs and MATPLOTLIB_AVAILABLE:
+                                        # Create organ distribution chart
+                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                        
+                                        organ_names = list(organs.keys())
+                                        organ_counts = list(organs.values())
+                                        
+                                        # Limit to top 10 organs for readability
+                                        if len(organ_names) > 10:
+                                            sorted_organs = sorted(organs.items(), key=lambda x: x[1], reverse=True)[:10]
+                                            organ_names = [item[0] for item in sorted_organs]
+                                            organ_counts = [item[1] for item in sorted_organs]
+                                        
+                                        bars = ax.barh(organ_names, organ_counts, color='skyblue')
+                                        ax.set_xlabel('Number of Spots')
+                                        ax.set_title('Spot Distribution by Organ System')
+                                        
+                                        # Add count labels on bars
+                                        for bar in bars:
+                                            width = bar.get_width()
+                                            ax.text(width + 0.1, bar.get_y() + bar.get_height()/2., 
+                                                   f'{int(width)}', ha='left', va='center')
+                                        
+                                        plt.tight_layout()
+                                        st.pyplot(fig)
+                                        
+                                        # Display organ-specific recommendations
+                                        st.markdown("#### Organ-Specific Observations")
+                                        
+                                        for organ, count in sorted(organs.items(), key=lambda x: x[1], reverse=True)[:5]:
+                                            if count > 1:
+                                                st.markdown(f"**{organ}**: {count} spots detected - Consider supporting this system")
+                                    elif organs:
+                                        # Fallback display without matplotlib
+                                        st.markdown("#### Organ Distribution")
+                                        for organ, count in sorted(organs.items(), key=lambda x: x[1], reverse=True):
+                                            st.markdown(f"**{organ}**: {count} spots")
+                                    else:
+                                        st.info("No organ mapping data available.")
+                                
+                                with enhanced_subtabs[3]:
+                                    st.subheader("Health Assessment & Recommendations")
+                                    
+                                    analysis_summary = enhanced_results.get('analysis_summary', {})
+                                    health_indicators = analysis_summary.get('health_indicators', {})
+                                    
+                                    if health_indicators:
+                                        # Overall assessment
+                                        if 'overall' in health_indicators:
+                                            st.markdown("### Overall Assessment")
+                                            assessment = health_indicators['overall']
+                                            
+                                            if "good" in assessment.lower() or "minimal" in assessment.lower():
+                                                st.success(f"✅ {assessment}")
+                                            elif "moderate" in assessment.lower():
+                                                st.warning(f"⚠️ {assessment}")
+                                            else:
+                                                st.error(f"🔴 {assessment}")
+                                        
+                                        # Zone-specific assessments
+                                        st.markdown("### Zone-Specific Analysis")
+                                        
+                                        zones = analysis_summary.get('zones', {})
+                                        total_spots = analysis_summary.get('total_spots', 0)
+                                        
+                                        for zone, count in zones.items():
+                                            percentage = (count / total_spots * 100) if total_spots > 0 else 0
+                                            
+                                            col1, col2 = st.columns([3, 1])
+                                            with col1:
+                                                st.markdown(f"**{zone}**: {count} spots ({percentage:.1f}%)")
+                                            with col2:
+                                                st.progress(percentage / 100)
+                                        
+                                        # Specific recommendations
+                                        st.markdown("### Recommendations")
+                                        
+                                        for key, indicator in health_indicators.items():
+                                            if key != 'overall' and indicator:
+                                                st.markdown(f"• {indicator}")
+                                        
+                                        # General Ayurvedic recommendations
+                                        st.markdown("### General Ayurvedic Guidelines")
+                                        st.markdown("""
+                                        - **Detoxification**: Consider gentle cleansing practices (Panchakarma)
+                                        - **Diet**: Focus on fresh, whole foods and proper food combining
+                                        - **Lifestyle**: Maintain regular sleep patterns and stress management
+                                        - **Herbs**: Consult with an Ayurvedic practitioner for personalized herbal support
+                                        - **Follow-up**: Regular iris analysis can track improvements over time
+                                        """)
+                                    else:
+                                        st.info("No specific health indicators generated. This may indicate minimal tissue stress.")
+                            else:
+                                st.info("👆 Click 'Re-analyze with Enhanced Detection' above to perform detailed spot analysis.")
+                    
+                    # Color Analysis tab
+                    with advanced_tabs[2]:
                         st.subheader("Iris Color Analysis")
                         
                         features = analysis_results.get("features", {})
@@ -1314,7 +1956,7 @@ with tabs[4]:
                             st.warning("No color analysis data available")
                     
                     # Spot Detection tab
-                    with advanced_tabs[2]:
+                    with advanced_tabs[3]:
                         st.subheader("Iris Spot Analysis")
                         
                         # Get spot data
@@ -1358,7 +2000,7 @@ with tabs[4]:
                             st.success("No significant spots detected in the iris - this generally indicates good elimination of toxins from the system.")
                     
                     # Texture Analysis tab
-                    with advanced_tabs[3]:
+                    with advanced_tabs[4]:
                         st.subheader("Iris Texture Analysis")
                         
                         # Get texture data
@@ -1430,7 +2072,7 @@ with tabs[4]:
                             st.warning("No texture analysis data available")
                     
                     # Pattern Matching tab
-                    with advanced_tabs[4]:
+                    with advanced_tabs[5]:
                         st.subheader("Iris Pattern Matching")
                         
                         # Create tabs for user patterns and research datasets
@@ -1635,7 +2277,7 @@ with tabs[4]:
                             """)
                     
                     # Health Insights tab
-                    with advanced_tabs[5]:
+                    with advanced_tabs[6]:
                         st.subheader("Comprehensive Health Insights")
                         
                         # Generate health insights
@@ -1826,42 +2468,182 @@ with tabs[4]:
                     
                     # Add button to generate comprehensive report
                     st.markdown("---")
-                    if st.button("Generate Comprehensive Iris Analysis Report"):
+                    st.subheader("📄 Generate Comprehensive Report")
+                    
+                    # Report format selection
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        report_format = st.selectbox(
+                            "Report Format",
+                            ["PDF", "HTML"],
+                            help="Choose the format for your comprehensive iris analysis report"
+                        )
+                    
+                    with col2:
+                        include_enhanced = st.checkbox(
+                            "Include Enhanced Spot Analysis",
+                            value=hasattr(st.session_state, 'enhanced_analysis_results'),
+                            help="Include detailed spot detection results in the report",
+                            disabled=not hasattr(st.session_state, 'enhanced_analysis_results')
+                        )
+                    
+                    # User information for report
+                    with st.expander("Optional: Add Personal Information to Report"):
+                        user_name = st.text_input("Name", key="enhanced_report_name")
+                        user_age = st.number_input("Age", min_value=1, max_value=120, value=30, key="enhanced_report_age")
+                        user_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="enhanced_report_gender")
+                        user_email = st.text_input("Email", key="enhanced_report_email")
+                        user_concerns = st.text_area("Health Concerns or Goals", key="enhanced_report_concerns")
+                    
+                    # Collect user info
+                    user_info = {}
+                    if user_name:
+                        user_info["Name"] = user_name
+                    if user_age:
+                        user_info["Age"] = str(user_age)
+                    if user_gender:
+                        user_info["Gender"] = user_gender
+                    if user_email:
+                        user_info["Email"] = user_email
+                    if user_concerns:
+                        user_info["Health Concerns"] = user_concerns
+                    
+                    if st.button("🎯 Generate Comprehensive Iris Analysis Report", use_container_width=True):
                         with st.spinner("Generating comprehensive iris analysis report..."):
-                            # Generate PDF report (using existing IrisReportGenerator)
                             try:
-                                # TODO: Update the report generator to include advanced analysis
-                                # For now, just display a message
-                                st.success("Report generation feature will be available in the next update!")
-                                
-                                # Alternatively, use the existing report generator with available data
                                 if "zone_analysis" in analysis_results:
-                                    zone_results = {
-                                        "health_summary": analysis_results["zone_analysis"]["health_summary"],
-                                        "zones_analysis": analysis_results["zone_analysis"]["zones_analysis"],
-                                        "original_image": temp_advanced_path  # Use the path to the original image
-                                    }
+                                    # Prepare zone results data
+                                    zone_results = analysis_results["zone_analysis"].copy()
                                     
-                                    # Generate report using existing functionality
-                                    report_path = st.session_state.iris_report_generator.generate_report(
-                                        zone_results,
-                                        include_details=True,
-                                        include_recommendations=True
-                                    )
+                                    # Add original image to zone results
+                                    if uploaded_advanced_image is not None:
+                                        # Convert uploaded file to PIL Image
+                                        from PIL import Image
+                                        original_img = Image.open(uploaded_advanced_image)
+                                        zone_results["original_image"] = original_img
                                     
-                                    # Provide download link
-                                    with open(report_path, "rb") as file:
-                                        report_bytes = file.read()
+                                    # Get enhanced results if available and requested
+                                    enhanced_results = None
+                                    if include_enhanced and hasattr(st.session_state, 'enhanced_analysis_results'):
+                                        enhanced_results = st.session_state.enhanced_analysis_results
                                     
-                                    st.download_button(
-                                        label="Download Iris Analysis Report",
-                                        data=report_bytes,
-                                        file_name="iris_analysis_report.pdf",
-                                        mime="application/pdf"
-                                    )
+                                    # Generate report using enhanced generator if available
+                                    if ENHANCED_REPORT_GENERATOR_AVAILABLE and hasattr(st.session_state, 'enhanced_iris_report_generator'):
+                                        if report_format == "PDF":
+                                            report_bytes = st.session_state.enhanced_iris_report_generator.generate_enhanced_pdf_report(
+                                                zone_results,
+                                                enhanced_results,
+                                                user_info if user_info else None
+                                            )
+                                            
+                                            if report_bytes:
+                                                st.success("✅ Enhanced PDF report generated successfully!")
+                                                
+                                                # Generate filename with timestamp
+                                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                                filename = f"enhanced_iris_analysis_report_{timestamp}.pdf"
+                                                
+                                                st.download_button(
+                                                    label="📥 Download Enhanced Iris Analysis Report (PDF)",
+                                                    data=report_bytes,
+                                                    file_name=filename,
+                                                    mime="application/pdf",
+                                                    use_container_width=True
+                                                )
+                                                
+                                                # Show report preview info
+                                                st.info(f"""
+                                                **Report Generated Successfully!**
+                                                - Format: PDF
+                                                - Enhanced Analysis: {'Yes' if enhanced_results else 'No'}
+                                                - Total Spots Detected: {len(enhanced_results.get('spots', [])) if enhanced_results else 'N/A'}
+                                                - Personal Info: {'Included' if user_info else 'Not included'}
+                                                """)
+                                            else:
+                                                st.error("Failed to generate PDF report. Please try again.")
+                                                
+                                        else:  # HTML format
+                                            html_report = st.session_state.enhanced_iris_report_generator.generate_enhanced_html_report(
+                                                zone_results,
+                                                enhanced_results,
+                                                user_info if user_info else None
+                                            )
+                                            
+                                            st.success("✅ Enhanced HTML report generated successfully!")
+                                            
+                                            # Show HTML report in expandable section
+                                            with st.expander("📋 View HTML Report", expanded=True):
+                                                st.components.v1.html(html_report, height=800, scrolling=True)
+                                            
+                                            # Provide download option for HTML
+                                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                            filename = f"enhanced_iris_analysis_report_{timestamp}.html"
+                                            
+                                            st.download_button(
+                                                label="📥 Download Enhanced Iris Analysis Report (HTML)",
+                                                data=html_report.encode('utf-8'),
+                                                file_name=filename,
+                                                mime="text/html",
+                                                use_container_width=True
+                                            )
+                                    
+                                    else:
+                                        # Fallback to original report generator
+                                        st.warning("Enhanced report generator not available. Using standard report generator.")
+                                        
+                                        if report_format == "PDF":
+                                            pdf_report = st.session_state.iris_report_generator.generate_report(
+                                                zone_results,
+                                                user_info if user_info else None
+                                            )
+                                            
+                                            if pdf_report:
+                                                st.success("✅ Standard PDF report generated successfully!")
+                                                
+                                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                                filename = f"iris_analysis_report_{timestamp}.pdf"
+                                                
+                                                st.download_button(
+                                                    label="📥 Download Iris Analysis Report (PDF)",
+                                                    data=pdf_report,
+                                                    file_name=filename,
+                                                    mime="application/pdf",
+                                                    use_container_width=True
+                                                )
+                                            else:
+                                                st.error("Failed to generate PDF report.")
+                                        else:
+                                            # HTML report
+                                            html_report = st.session_state.iris_report_generator.generate_html_report(
+                                                zone_results,
+                                                user_info if user_info else None
+                                            )
+                                            
+                                            st.success("✅ Standard HTML report generated successfully!")
+                                            
+                                            with st.expander("📋 View HTML Report", expanded=True):
+                                                st.components.v1.html(html_report, height=600, scrolling=True)
+                                            
+                                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                            filename = f"iris_analysis_report_{timestamp}.html"
+                                            
+                                            st.download_button(
+                                                label="📥 Download Iris Analysis Report (HTML)",
+                                                data=html_report.encode('utf-8'),
+                                                file_name=filename,
+                                                mime="text/html",
+                                                use_container_width=True
+                                            )
+                                
+                                else:
+                                    st.error("No analysis results available. Please perform iris analysis first.")
+                                    
                             except Exception as e:
                                 st.error(f"Error generating report: {str(e)}")
-                                st.info("Advanced report generation will be available in the next update.")
+                                st.info("Please try again or contact support if the issue persists.")
+                                # Show debug info in development
+                                if st.checkbox("Show Debug Info"):
+                                    st.exception(e)
         
         except Exception as e:
             st.error(f"Error in advanced iris analysis: {str(e)}")
@@ -1873,7 +2655,7 @@ with tabs[4]:
                 pass
                 
             # Health Queries tab
-            with advanced_tabs[6]:
+            with advanced_tabs[7]:
                 st.subheader("Personalized Health Queries")
                 
                 st.markdown("""

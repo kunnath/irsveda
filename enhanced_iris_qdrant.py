@@ -302,3 +302,151 @@ class EnhancedIrisQdrantClient:
             variations.append(f"{query} iridology")
         
         return variations
+    
+    def search_by_dosha(self, dosha_type: str, query: str, limit: int = 5, min_score: float = 0.5) -> List[Dict[str, Any]]:
+        """
+        Search for chunks related to a specific dosha (vata, pitta, kapha).
+        
+        Args:
+            dosha_type: The dosha type to search for - "vata", "pitta", or "kapha"
+            query: The query string to search for within dosha-related content
+            limit: Maximum number of results to return
+            min_score: Minimum similarity score threshold
+            
+        Returns:
+            List of matching dosha-specific chunks with scores and highlights
+        """
+        if dosha_type not in ["vata", "pitta", "kapha"]:
+            raise ValueError(f"Invalid dosha type: {dosha_type}. Must be one of: vata, pitta, kapha")
+        
+        # Process query
+        processed_query, query_keywords = self._process_query(query)
+        
+        # Add dosha-specific terms to enhance the query
+        dosha_enhanced_query = f"{dosha_type} {processed_query}"
+        
+        # Generate query embedding
+        query_vector = self.model.encode(dosha_enhanced_query).tolist()
+        
+        # Prepare Qdrant search with filter for dosha type
+        search_results = self.client.search(
+            collection_name=self.collection_name,
+            query_vector=query_vector,
+            query_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="is_dosha_related",
+                        match=models.MatchValue(value=True)
+                    ),
+                    models.FieldCondition(
+                        key="primary_dosha",
+                        match=models.MatchValue(value=dosha_type)
+                    )
+                ]
+            ),
+            limit=limit * 2,  # Fetch more for re-ranking
+            score_threshold=min_score
+        )
+        
+        # Re-rank results with hybrid scoring
+        scored_results = []
+        for match in search_results:
+            # Start with vector similarity score
+            base_score = match.score
+            
+            # Get text and metadata
+            text = match.payload.get("text", "")
+            keywords = match.payload.get("keywords", [])
+            
+            # Boost scores for results with stronger dosha relevance
+            dosha_scores = match.payload.get("dosha_scores", {})
+            dosha_score = dosha_scores.get(dosha_type, 0.0)
+            dosha_boost = min(0.2, dosha_score * 0.5)  # Cap at 0.2 boost
+            
+            # Calculate keyword overlap boost
+            keyword_boost = self._calculate_keyword_overlap(query_keywords, keywords, text)
+            
+            # Calculate final score with boosting
+            final_score = min(1.0, base_score + keyword_boost + dosha_boost)
+            
+            # Generate highlights
+            highlights = self._generate_highlights(text, query_keywords + [dosha_type])
+            
+            # Add to results
+            scored_results.append({
+                "text": text,
+                "page": match.payload.get("page", 0),
+                "source": match.payload.get("source", ""),
+                "score": final_score,
+                "vector_score": base_score,
+                "keyword_boost": keyword_boost,
+                "dosha_boost": dosha_boost,
+                "highlights": highlights,
+                "extraction_method": match.payload.get("extraction_method", "standard"),
+                "keywords": keywords,
+                "dosha_scores": dosha_scores,
+                "primary_dosha": match.payload.get("primary_dosha", "unknown")
+            })
+        
+        # Sort by final score and limit results
+        scored_results.sort(key=lambda x: x["score"], reverse=True)
+        return scored_results[:limit]
+    
+    def search_dosha_questions(self, dosha_type: str, question_type: str = "how", limit: int = 3) -> List[Dict[str, Any]]:
+        """
+        Search for content that answers specific types of questions about a dosha.
+        
+        Args:
+            dosha_type: The dosha type to search for - "vata", "pitta", or "kapha"
+            question_type: The type of question - "how", "why", "when", or "where"
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of matching chunks that answer the specified question type
+        """
+        if dosha_type not in ["vata", "pitta", "kapha"]:
+            raise ValueError(f"Invalid dosha type: {dosha_type}. Must be one of: vata, pitta, kapha")
+            
+        if question_type not in ["how", "why", "when", "where"]:
+            raise ValueError(f"Invalid question type: {question_type}. Must be one of: how, why, when, where")
+        
+        # Create query based on question type
+        query_map = {
+            "how": f"how to balance {dosha_type} dosha",
+            "why": f"why {dosha_type} dosha becomes imbalanced",
+            "when": f"when {dosha_type} dosha becomes imbalanced symptoms",
+            "where": f"where {dosha_type} dosha manifests in body"
+        }
+        
+        query = query_map[question_type]
+        
+        # Use the existing dosha search function
+        return self.search_by_dosha(dosha_type, query, limit=limit)
+    
+    def get_dosha_comparison(self, dosha_types: List[str] = ["vata", "pitta", "kapha"]) -> Dict[str, Any]:
+        """
+        Get comparison information for different doshas.
+        
+        Args:
+            dosha_types: List of dosha types to compare
+            
+        Returns:
+            Dictionary with comparison information for the doshas
+        """
+        comparison_results = {}
+        
+        for dosha in dosha_types:
+            # Search for definition/characteristics of each dosha
+            results = self.search_by_dosha(dosha, "characteristics definition", limit=1)
+            
+            if results:
+                comparison_results[dosha] = {
+                    "definition": results[0].get("text", "No information available"),
+                    "keywords": results[0].get("keywords", []),
+                    "score": results[0].get("score", 0)
+                }
+        
+        return {
+            "available": len(comparison_results) > 0,
+            "comparison": comparison_results
+        }

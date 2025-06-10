@@ -12,6 +12,7 @@ import logging
 from sklearn.cluster import KMeans
 from scipy import ndimage
 from skimage.feature import local_binary_pattern
+from iris_advanced_segmentation import preprocess_image, segment_iris, extract_iris_zones
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

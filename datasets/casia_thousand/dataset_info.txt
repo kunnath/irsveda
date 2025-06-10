@@ -1,0 +1,5 @@
+Dataset: CASIA-Iris-Thousand
+Description: A dataset containing 20,000 iris images from 1,000 subjects
+Citation: CASIA Iris Image Database, http://biometrics.idealtest.org/
+
+Note: This is a placeholder. The actual dataset needs to be obtained from the official source.
