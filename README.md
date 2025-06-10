@@ -1,7 +1,7 @@
 # IridoVeda: Ayurvedic Iridology Knowledge Base
 
 <p align="center">
-  <img src="irs.png" alt="IridoVeda Logo" width="300">
+  <img src="iridoveda.png" alt="IridoVeda Logo" width="300">
 </p>
 
 ## Overview
@@ -19,8 +19,117 @@ Powered by [Dinexora](https://www.dinexora.de)
 - Comprehensive iris image analysis with zone mapping
 - Advanced iris analysis with color, texture, and spot detection
 - Pattern matching with similar iris patterns
+- Ayurvedic dosha quantification (Vata, Pitta, Kapha)
+- Metabolic health metrics estimation
+- Organ health assessment based on iris features
+- Personalized health recommendations based on dosha profile
 - Health insights and Ayurvedic recommendations
 - PDF and HTML report generation
+
+## 🔬 Iris Image Analysis Features
+
+IridoVeda provides state-of-the-art iris image analysis capabilities that combine traditional Ayurvedic iridology with modern computer vision and machine learning techniques.
+
+### 🎯 Core Analysis Modules
+
+#### 1. **Advanced Image Segmentation**
+- **Automatic Iris Detection**: Precisely identifies and extracts the iris region from uploaded images
+- **Boundary Detection**: Advanced algorithms to define iris boundaries and exclude pupil/sclera areas
+- **Quality Assessment**: Validates image quality and provides feedback for optimal analysis
+- **Multi-format Support**: Supports JPEG, PNG, and other common image formats
+
+#### 2. **Color Pattern Analysis**
+- **Dominant Color Extraction**: Identifies primary and secondary colors in different iris zones
+- **Color Distribution Mapping**: Quantifies color percentages across iris regions
+- **Ayurvedic Color Interpretation**: Links colors to dosha characteristics (Vata, Pitta, Kapha)
+- **Constitutional Assessment**: Determines individual constitution based on color patterns
+
+#### 3. **Texture and Fiber Analysis**
+- **Iris Fiber Patterns**: Analyzes radial fiber structures and density variations
+- **Texture Metrics**: Calculates contrast, uniformity, energy, and entropy measurements
+- **Structural Assessment**: Evaluates lacunae, crypts, and other structural features
+- **Tissue Integrity Analysis**: Assesses iris tissue quality and constitutional strength
+
+#### 4. **Spot and Marking Detection**
+- **Automatic Spot Detection**: Uses computer vision to identify spots, freckles, and pigmentation
+- **Zone-based Mapping**: Maps detected features to specific organ systems
+- **Toxicity Assessment**: Analyzes spots for potential detoxification needs
+- **Pigment Classification**: Categorizes different types of pigmentation and their meanings
+
+#### 5. **Intelligent Zone Mapping**
+- **12-Zone Analysis**: Comprehensive mapping based on traditional iridology zones
+- **Organ System Correlation**: Links iris zones to corresponding body systems
+- **Health Status Indicators**: Provides insights into organ function and vitality
+- **Comparative Analysis**: Tracks changes over time with multiple image uploads
+
+### 🧬 Advanced Analysis Capabilities
+
+#### **Pattern Recognition & Matching**
+- **Vector Database Storage**: Stores iris patterns as high-dimensional vectors in Qdrant
+- **Similarity Search**: Finds similar iris patterns from historical data
+- **Feature Comparison**: Detailed comparison of features between different iris images
+- **Population Analysis**: Comparative analysis against stored pattern database
+
+#### **Dosha Quantification Engine**
+- **Multi-parameter Analysis**: Combines color, texture, and structural features
+- **Weighted Scoring System**: Advanced algorithms for accurate dosha percentage calculation
+- **Constitutional Typing**: Determines Prakriti (original constitution) and Vikriti (current state)
+- **Imbalance Detection**: Identifies specific dosha imbalances and their severity
+
+#### **Health Metrics Calculation**
+- **Metabolic Indicators**: Estimates BMR, metabolic efficiency, and energy levels
+- **Cardiovascular Markers**: Analyzes circulation patterns and heart health indicators
+- **Digestive Assessment**: Evaluates digestive fire (Agni) and gut health
+- **Nervous System Analysis**: Assesses stress levels and nervous system function
+
+### 📊 Visualization and Reporting
+
+#### **Interactive Analysis Dashboard**
+- **Real-time Processing**: Live analysis updates as images are uploaded
+- **Multi-tab Interface**: Organized views for different analysis aspects
+- **Visual Overlays**: Graphical representations of zones, spots, and patterns
+- **Progress Indicators**: Clear feedback during analysis processing
+
+#### **Comprehensive Reports**
+- **PDF Generation**: Professional reports with detailed analysis and recommendations
+- **Visual Documentation**: Before/after comparisons and annotated iris images
+- **Ayurvedic Insights**: Traditional interpretations combined with modern analysis
+- **Actionable Recommendations**: Personalized health suggestions and lifestyle advice
+
+#### **Data Export Options**
+- **Analysis Results**: Export detailed numerical data and measurements
+- **Image Annotations**: Save annotated images with analysis overlays
+- **Historical Tracking**: Compare multiple analyses over time
+- **Integration Ready**: JSON/CSV exports for integration with other health systems
+
+### 🎯 Practical Applications
+
+#### **Healthcare Practitioners**
+- **Client Assessment**: Comprehensive constitutional analysis for new clients
+- **Treatment Monitoring**: Track progress and treatment effectiveness over time
+- **Documentation**: Professional reports for client records and consultation notes
+- **Education**: Visual tools for explaining constitutional patterns to clients
+
+#### **Personal Health Management**
+- **Self-Assessment**: Understanding your own constitutional makeup
+- **Lifestyle Optimization**: Personalized recommendations for diet, exercise, and daily routines
+- **Health Monitoring**: Regular check-ins to track constitutional changes
+- **Preventive Care**: Early detection of potential imbalances before symptoms appear
+
+#### **Research and Education**
+- **Pattern Studies**: Large-scale analysis of iris patterns and health correlations
+- **Educational Material**: Visual examples for teaching iridology principles
+- **Data Collection**: Building comprehensive databases of iris patterns and health outcomes
+- **Validation Studies**: Supporting research into traditional iridology claims
+
+### 🚀 Technology Stack
+
+- **Computer Vision**: OpenCV and advanced image processing algorithms
+- **Machine Learning**: TensorFlow/PyTorch for pattern recognition and classification
+- **Vector Database**: Qdrant for efficient similarity search and pattern storage
+- **Natural Language Processing**: spaCy for text analysis and knowledge extraction
+- **Ayurvedic Knowledge Base**: Comprehensive database of traditional iridology principles
+- **Modern UI/UX**: Streamlit-based interface for intuitive user experience
 
 ## Getting Started
 
@@ -67,6 +176,44 @@ pip install -r requirements.txt
 ./run.sh
 ```
 
+## Usage
+
+### 📚 Knowledge Base Management
+1. Upload Ayurvedic/Iridology books in PDF format
+2. Process the PDFs to extract iris-related information (choose between standard and enhanced processing)
+3. Store the extracted information in the knowledge base
+4. Query the knowledge base with natural language questions
+5. Explore statistics and insights about your knowledge base
+
+### 👁️ Iris Image Analysis Workflow
+1. **Image Upload**: Navigate to the "🧬 Advanced Analysis" or "Dosha Analysis" tab
+2. **Image Selection**: Upload a clear, high-resolution iris image (JPEG/PNG format)
+3. **Automatic Processing**: The system will automatically:
+   - Detect and segment the iris region
+   - Analyze color patterns and distribution
+   - Identify spots, markings, and structural features
+   - Calculate texture metrics and fiber patterns
+   - Map features to traditional iridology zones
+4. **Results Exploration**: Browse through different analysis tabs:
+   - **Color Analysis**: View dominant colors and their Ayurvedic interpretations
+   - **Spot Detection**: See identified spots mapped to organ systems
+   - **Texture Analysis**: Examine fiber patterns and structural integrity
+   - **Pattern Matching**: Compare with similar iris patterns in the database
+   - **Dosha Analysis**: View your constitutional makeup and current imbalances
+5. **Report Generation**: Generate comprehensive PDF reports with:
+   - Detailed analysis results and visualizations
+   - Personalized Ayurvedic recommendations
+   - Lifestyle and dietary suggestions
+   - Health insights and organ assessments
+
+### 🎯 Best Practices for Iris Photography
+- **Lighting**: Use natural daylight or consistent white LED lighting
+- **Distance**: Maintain 6-12 inches from the eye
+- **Focus**: Ensure the iris is in sharp focus
+- **Angle**: Capture straight-on view without tilting
+- **Quality**: Use high-resolution images (minimum 800x600 pixels)
+- **Format**: Upload in JPEG or PNG format for best compatibility
+
 ## Project Structure
 
 ```
@@ -86,10 +233,12 @@ iridoveda/
 ├── iris_advanced_segmentation.py   # Enhanced iris boundary detection algorithms
 ├── iris_feature_extractor.py       # Color, texture, and spot feature extraction
 ├── iris_pattern_matcher.py         # Pattern storage and similarity search using Qdrant
+├── dosha_quantification_model.py   # Ayurvedic dosha analysis and health metrics
 ├── docker-compose.yml              # Multi-container Docker setup
 ├── Dockerfile                      # Container configuration
 ├── run.sh                          # Basic mode startup script
 ├── run_enhanced.sh                 # Enhanced mode startup script
+├── run_dosha_app.sh                # Start app with dosha analysis features
 ├── setup.sh                        # Basic setup script
 ├── setup_advanced.sh               # Advanced setup script with all features
 ├── static/                         # Static assets (logos, etc.)
@@ -98,177 +247,6 @@ iridoveda/
 ├── requirements.txt                # Python dependencies
 └── docker-compose.yml              # Docker Compose configuration
 ```
-
-## Setup and Installation
-
-### Quick Start with Advanced Features
-
-1. Run the setup script to create a virtual environment and install dependencies:
-
-```bash
-./setup_advanced.sh
-```
-
-2. Start the application with all advanced features:
-
-```bash
-./run_advanced.sh
-```
-
-3. Access the application at: http://localhost:8501
-
-### Alternative Setup with Conda (Recommended for spacy installation issues)
-
-If you encounter issues installing dependencies with pip, especially with spacy, use the conda setup:
-
-1. Install Miniconda or Anaconda if not already installed
-2. Run the conda setup script:
-
-```bash
-./setup_conda.sh
-```
-
-3. Start the application using the conda environment:
-
-```bash
-./run_conda.sh
-```
-
-4. Access the application at: http://localhost:8501
-
-### Local Development
-
-1. Set up a Python virtual environment:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-3. Run Qdrant (either locally with Docker or connect to a cloud instance):
-
-```bash
-docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
-```
-
-4. Run the Streamlit app:
-
-```bash
-# For basic version:
-streamlit run app.py
-
-# For enhanced version (recommended):
-streamlit run advanced_app.py
-```
-
-### Using Docker Compose
-
-1. Build and start the containers:
-
-```bash
-# Build the containers
-docker compose build
-
-# Start in detached mode
-docker compose up -d
-
-# View logs if needed
-docker compose logs -f
-```
-
-2. Access the application at `http://localhost:8501`
-
-3. Stop the containers when done:
-
-```bash
-docker compose down
-```
-
-## Docker Hub Integration
-
-IridoVeda can be easily deployed using the official Docker image from Docker Hub. This is the recommended approach for production deployments or if you're experiencing build issues.
-
-### Using the Pre-built Image
-
-```bash
-docker pull dinexora/iridoveda:latest
-docker run -p 8501:8501 dinexora/iridoveda:latest
-```
-
-For a complete setup with Qdrant, use the provided docker-compose:
-
-```bash
-# Create a docker-compose.yml file with pre-built image configuration
-cat > docker-compose.prebuilt.yml << EOL
-services:
-  app:
-    image: dinexora/iridoveda:latest
-    ports:
-      - "8501:8501"
-    depends_on:
-      - qdrant
-    environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-    restart: unless-stopped
-
-  qdrant:
-    image: qdrant/qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-volumes:
-  qdrant_data:
-    driver: local
-EOL
-
-# Run with the pre-built image configuration
-docker compose -f docker-compose.prebuilt.yml up -d
-```
-
-### Publishing to Docker Hub
-
-If you've made custom modifications and want to publish your own version to Docker Hub:
-
-1. Run the Docker setup script:
-
-```bash
-./setup_docker.sh
-```
-
-2. Select option 4: "Build and push to Docker Hub"
-3. Follow the prompts to provide:
-   - Your Docker Hub username
-   - Repository name (default: iridoveda)
-   - Image tag (default: latest)
-4. The script will build the image, log in to Docker Hub, and push your image
-
-You can then use your custom image by replacing `dinexora/iridoveda:latest` with `yourusername/yourrepo:tag` in the examples above.
-
-## Usage
-
-1. Upload Ayurvedic/Iridology books in PDF format
-2. Process the PDFs to extract iris-related information (choose between standard and enhanced processing)
-3. Store the extracted information in the knowledge base
-4. Query the knowledge base with natural language questions
-5. Upload iris images for analysis and recommendations
-6. Generate detailed iris zone analysis reports
-7. Explore statistics and insights about your knowledge base
 
 ## Advanced Features
 
@@ -279,43 +257,29 @@ You can then use your custom image by replacing `dinexora/iridoveda:latest` with
 - **Context-Aware Answers**: AI-generated responses synthesized from multiple sources
 - **Statistical Insights**: Analyze the content of your knowledge base
 
-## Advanced Iris Analysis
+## Ayurvedic Dosha Analysis
 
-The Advanced Analysis tab provides comprehensive iris analysis using computer vision and machine learning techniques:
+IridoVeda now includes a comprehensive Ayurvedic dosha analysis module that quantifies Vata, Pitta, and Kapha doshas from iris images and provides detailed health metrics and organ assessments.
 
-### Features
+### Key Features
 
-1. **Color Analysis**
-   - Identifies dominant colors in the iris
-   - Quantifies color distribution percentages
-   - Provides Ayurvedic interpretation of colors
+- **Dosha Quantification**: Analysis of iris features to determine Vata, Pitta, and Kapha percentages
+- **Health Metrics**: Calculation of metabolic indicators including basal metabolic rate, serum lipid, triglycerides, and more
+- **Organ Health Assessment**: Evaluation of major organs based on iris zones and dosha influences
+- **Personalized Recommendations**: Ayurvedic health recommendations based on your unique dosha profile
 
-2. **Spot Detection**
-   - Identifies and counts spots/freckles in the iris
-   - Maps spots to organ systems based on iridology principles
-   - Offers detoxification suggestions based on spot patterns
+### Getting Started with Dosha Analysis
 
-3. **Texture Analysis**
-   - Analyzes iris fiber patterns and structures
-   - Calculates quantitative metrics: contrast, uniformity, energy, entropy
-   - Links texture patterns to dosha constitutions
+1. Launch the application with dosha analysis support:
+   ```bash
+   ./run_dosha_app.sh
+   ```
 
-4. **Pattern Matching**
-   - Stores iris patterns in a vector database
-   - Compares new iris patterns with historical data
-   - Provides similarity scores and feature comparisons
+2. Navigate to the "Dosha Analysis" tab in the application
+3. Upload a clear iris image
+4. View your comprehensive dosha profile and health assessment
 
-5. **Health Insights**
-   - Generates comprehensive health assessment
-   - Visualizes dosha distribution
-   - Provides tailored Ayurvedic recommendations
-
-## Accessing Advanced Analysis
-
-1. Upload an iris image in the "🧬 Advanced Analysis" tab
-2. Wait for the system to process the image (typically 5-10 seconds)
-3. Explore the different analysis views through the subtabs
-4. Generate a comprehensive report with the button at the bottom of the page
+For more detailed information about the dosha analysis feature, see [DOSHA_ANALYSIS.md](DOSHA_ANALYSIS.md).
 
 ## Contact & Support
 
