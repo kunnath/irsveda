@@ -125,170 +125,99 @@ class AdvancedIrisAnalyzer:
     
     def analyze_iris(self, image_path: str, enhanced_qdrant_client=None) -> Dict[str, Any]:
         """
-        Perform comprehensive iris analysis on an image.
+        Perform comprehensive iris analysis.
         
         Args:
-            image_path: Path to the iris image file
-            enhanced_qdrant_client: Optional EnhancedIrisQdrantClient for fetching knowledge
+            image_path: Path to the iris image
+            enhanced_qdrant_client: Optional enhanced Qdrant client for pattern matching
             
         Returns:
-            Dictionary with analysis results
+            Dictionary containing analysis results
         """
         try:
-            # Load the image
-            original_image = self.load_image(image_path)
-            if original_image is None:
-                return {"error": "Failed to load image"}
+            # Load and preprocess image
+            image = self.load_image(image_path)
+            preprocessed = preprocess_image(image)
             
-            # Track processing time
-            start_time = time.time()
-            
-            # Step 1: Preprocess the image
-            preprocessed_image, gray_image, _ = preprocess_image(original_image)
-            
-            # Step 2: Segment the iris
-            segmentation_data = segment_iris(preprocessed_image)
-            if segmentation_data is None:
-                return {"error": "Failed to segment iris - no iris detected"}
-            
-            # Step 3: Extract iris zones
-            zone_data = extract_iris_zones(segmentation_data)
-            if zone_data:
-                segmentation_data.update(zone_data)
-            
-            # Step 4: Extract features
-            features = extract_all_features(original_image, segmentation_data)
-            
-            # Step 5: Search for similar patterns
-            similar_patterns = self.pattern_matcher.search_similar_patterns(features, limit=5)
-            
-            # Step 6: Also run the existing zone analyzer for compatibility
-            zone_results = self.zone_analyzer.process_iris_image(image_path)
-            
-            # Step 6.5: Perform deep spot, line, and color analysis
-            deep_analysis_results = {}
-            if self.enhanced_spot_analyzer is not None:
-                try:
-                    enhanced_spot_analysis = self.enhanced_spot_analyzer.comprehensive_spot_analysis(
-                        original_image, segmentation_data
-                    )
-                    deep_analysis_results["enhanced_spot_analysis"] = enhanced_spot_analysis
-                except Exception as e:
-                    logger.warning(f"Enhanced spot analysis failed: {str(e)}")
-                    deep_analysis_results["enhanced_spot_analysis"] = {"error": str(e)}
-            
-            if self.deep_analyzer is not None:
-                try:
-                    # Perform deep spot analysis
-                    deep_spot_analysis = self.deep_analyzer.deep_spot_analysis(
-                        original_image, segmentation_data
-                    )
-                    deep_analysis_results["deep_spot_analysis"] = deep_spot_analysis
-                    
-                    # Perform deep line analysis
-                    deep_line_analysis = self.deep_analyzer.deep_line_analysis(
-                        original_image, segmentation_data
-                    )
-                    deep_analysis_results["deep_line_analysis"] = deep_line_analysis
-                    
-                    # Perform deep color analysis
-                    deep_color_analysis = self.deep_analyzer.deep_color_analysis(
-                        original_image, segmentation_data
-                    )
-                    deep_analysis_results["deep_color_analysis"] = deep_color_analysis
-                    
-                    # Perform comprehensive texture analysis
-                    texture_analysis = self.deep_analyzer.comprehensive_texture_analysis(
-                        original_image, segmentation_data
-                    )
-                    deep_analysis_results["texture_analysis"] = texture_analysis
-                    
-                except Exception as e:
-                    logger.warning(f"Deep analysis failed: {str(e)}")
-                    deep_analysis_results["deep_analysis_error"] = str(e)
-            
-            # Step 7: Generate suggested health queries (if query generator is available)
-            suggested_queries = []
-            if self.query_generator is not None:
-                suggested_queries = self.query_generator.generate_query_from_iris_features(features)
-            
-            # Step 8: Create a combined result
-            analysis_result = {
-                "timestamp": datetime.now().isoformat(),
-                "processing_time": time.time() - start_time,
-                "segmentation": {
-                    "iris_center": segmentation_data["iris_center"],
-                    "iris_radius": segmentation_data["iris_radius"],
-                    "pupil_center": segmentation_data["pupil_center"],
-                    "pupil_radius": segmentation_data["pupil_radius"]
-                },
-                "features": {
-                    "color_summary": [
-                        {
-                            "color": f"rgb({int(c['color'][0])}, {int(c['color'][1])}, {int(c['color'][2])})",
-                            "percentage": c["percentage"]
-                        }
-                        for c in features.get("color_features", [])[:3]
-                    ],
-                    "spot_count": features.get("num_spots", 0),
-                    "texture_stats": features.get("texture_features", {})
-                },
-                "iris_spot_analysis": deep_analysis_results,
-                "similar_patterns": similar_patterns,
-                "suggested_queries": suggested_queries,
-                "image_paths": {
-                    "segmentation": self._save_visualization(segmentation_data["segmentation_image"], "segmentation"),
-                    "zones": self._save_visualization(zone_data["zone_visualization"], "zones") if zone_data else None
-                }
-            }
-            
-            # Add zone analysis from the existing analyzer if available
-            if zone_results and "error" not in zone_results:
-                analysis_result["zone_analysis"] = {
-                    "health_summary": zone_results.get("health_summary", {}),
-                    "zones_analysis": zone_results.get("zones_analysis", {})
-                }
+            # Perform iris segmentation
+            segmentation_results = segment_iris(preprocessed)
+            if "error" in segmentation_results:
+                return {"error": f"Segmentation failed: {segmentation_results['error']}"}
                 
-                # Add original visualization paths
-                analysis_result["image_paths"].update({
-                    "original": self._convert_to_base64(original_image),
-                    "zone_map": zone_results.get("zone_map", None),
-                    "boundary_image": zone_results.get("boundary_image", None),
-                })
+            # Extract zones using segmentation data
+            zones_data = extract_iris_zones(preprocessed, segmentation_results)
             
-            # Store this analysis in Qdrant for future reference
-            pattern_id = self.pattern_matcher.store_iris_pattern(
-                features,
+            # Perform zone analysis using updated analyzer
+            zone_analysis = self.zone_analyzer.analyze_zones(
+                preprocessed,
                 {
-                    "timestamp": analysis_result["timestamp"],
-                    "filename": os.path.basename(image_path)
+                    'iris_center': segmentation_results['iris_center'],
+                    'iris_radius': segmentation_results['iris_radius'],
+                    'pupil_radius': segmentation_results['pupil_radius']
                 }
             )
             
-            if pattern_id:
-                analysis_result["pattern_id"] = pattern_id
+            # Extract all iris features
+            features = extract_all_features(preprocessed, segmentation_results)
             
-            # Generate suggested queries if the generator is available
-            if self.query_generator and "suggested_queries" not in analysis_result:
-                analysis_result["suggested_queries"] = self.query_generator.generate_query_from_iris_features(analysis_result.get("features", {}))
-            
-            # Add knowledge summary if Qdrant client is available
+            # Perform pattern matching if client is available
+            pattern_matches = None
             if enhanced_qdrant_client:
-                # Create a feature set for knowledge retrieval
-                knowledge_features = features.copy()
-                
-                # Add pupil/iris ratio for knowledge lookup
-                if segmentation_data["iris_radius"] > 0 and segmentation_data["pupil_radius"]:
-                    knowledge_features["pupil_iris_ratio"] = segmentation_data["pupil_radius"] / segmentation_data["iris_radius"]
-                
-                # Fetch knowledge from Qdrant
-                knowledge_summary = self.fetch_knowledge_summary(knowledge_features, enhanced_qdrant_client)
-                analysis_result["knowledge_summary"] = knowledge_summary
+                pattern_matches = self.pattern_matcher.find_matches(
+                    features,
+                    enhanced_qdrant_client
+                )
             
-            return analysis_result
+            # Perform enhanced spot analysis if available
+            spot_analysis = None
+            if self.enhanced_spot_analyzer:
+                spot_analysis = self.enhanced_spot_analyzer.comprehensive_spot_analysis(
+                    preprocessed,
+                    segmentation_results
+                )
+            
+            # Perform deep analysis if available
+            deep_analysis = None
+            if self.deep_analyzer:
+                deep_analysis = self.deep_analyzer.analyze(
+                    preprocessed,
+                    segmentation_results,
+                    features
+                )
+            
+            # Generate suggested queries if available
+            suggested_queries = None
+            if self.query_generator:
+                suggested_queries = self.query_generator.generate_queries(
+                    zone_analysis,
+                    spot_analysis,
+                    deep_analysis
+                )
+            
+            # Combine all results
+            results = {
+                'timestamp': datetime.now().isoformat(),
+                'image_path': image_path,
+                'segmentation_results': segmentation_results,
+                'zone_analysis': zone_analysis,
+                'features': features,
+            }
+            
+            if pattern_matches:
+                results['pattern_matches'] = pattern_matches
+            if spot_analysis:
+                results['spot_analysis'] = spot_analysis
+            if deep_analysis:
+                results['deep_analysis'] = deep_analysis
+            if suggested_queries:
+                results['suggested_queries'] = suggested_queries
+                
+            return results
             
         except Exception as e:
             logger.error(f"Error in iris analysis: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {"error": f"Analysis failed: {str(e)}"}
     
     def _save_visualization(self, image: np.ndarray, name: str) -> Optional[str]:

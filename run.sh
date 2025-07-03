@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Activate the virtual environment
-if [ -d "venv" ]; then
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
 

@@ -4,11 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
-ENV/
-env/
-*.env
-.venv
 build/
 develop-eggs/
 dist/
@@ -24,21 +19,70 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-*.png
-# IDE files
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.DS_Store
+*~
 
-# Project-specific
+# Logs and databases
 *.log
+*.sqlite
+*.db
+qdrant_data/
+
+# Backup files
+*.bak
+*.backup
+*_backup_*
+*.before_fix
+
+# Generated files
+*.pdf
+*.html
+tmp/
+temp/
+output/
+outputs/
+*.pyc
+
+# Project specific
 uploads/*
 !uploads/.gitkeep
+uploaded_files/
+iris_images/
+test_output/
+*_analysis_*.pdf
+*_analysis_*.html
+.pytest_cache/
 *.pkl
-temp/
 .ipynb_checkpoints/
 
+# Keep specific images
+!iridoveda.png
+!irs.png
+!static/iris_logo.png
+
 # Docker
+.docker/
 qdrant_data/
+
+# System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
